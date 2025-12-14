@@ -25,6 +25,9 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 def startup():
     from database import engine, Base
     Base.metadata.create_all(bind=engine)
+    # Auto-create admin if missing (Essential for ephemeral DBs like Railway SQLite)
+    import init_admin
+    init_admin.create_admin_if_missing()
 
 from routes import router
 app.include_router(router, prefix="/api")
