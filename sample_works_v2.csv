@@ -1,0 +1,9 @@
+work_code,department,financial_year,block,panchayat,work_name,sanctioned_amount,latitude,longitude,current_status,sanctioned_date
+W001,RD (Rural Development),2023-24,Dantewada,Chitalanka,Road Construction Phase 1,500000,18.8955,81.3450,In Progress,2023-04-15
+W002,Education,2023-24,Geedam,Barsoor,Primary School Renovation,200000,19.1020,81.3800,Completed,2023-06-10
+W003,Health,2024-25,Katekalyan,Marjum,Sub-Health Center Repair,150000,18.8100,81.5500,Not Started,2024-01-20
+W004,RD (Rural Development),2024-25,Kuakonda,Sameli,Community Hall Construction,800000,18.6500,81.4000,Not Started,2024-02-05
+W005,Tribal Welfare,2023-24,Dantewada,Bhansi,Hostel Building Repair,350000,18.9500,81.3000,Completed,2023-08-12
+W006,PHE (Public Health Engineering),2024-25,Geedam,Haram,Solar Pump Installation,120000,19.0500,81.4200,In Progress,2024-03-01
+W007,Education,2024-25,Kuakonda,Nakulnar,High School Boundary Wall,600000,18.7000,81.3500,Not Started,2024-01-15
+W008,Forest,2023-24,Katekalyan,Potali,Check Dam Construction,450000,18.7800,81.6000,Completed,2023-11-20

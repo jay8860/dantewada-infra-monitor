@@ -1,0 +1,43 @@
+Total Rows: 5460
+Columns List:
+- गीदम 
+- YEAR
+- SECTOR
+- Work Name (in brief)
+- work name 
+- Gram Panchayat
+- Block Name 
+- Unnamed: 7
+- UNIQ ID
+- Work Id Number
+- AS Number
+-  AS Date
+- UNIQUE ID 
+- Tender Date
+- AS Amount (in Rs)
+- Evaluation  Amount (in Rs)
+- Agencys Released Amount And Date
+- Unnamed: 17
+- Unnamed: 18
+- Unnamed: 19
+- Unnamed: 20
+- Unnamed: 21
+- Unnamed: 22
+- Unnamed: 23
+- Unnamed: 24
+- Unnamed: 25
+- Total Released Amount 
+- Amount Pending as per AS
+- Agency Name
+- Work Completion Timelimit as per AS (in days)
+- Probable Date of Completion (संभावित पूर्णता तिथि) 
+- Work Status
+- Work %
+- Photo with Date
+- Work Verified on ground?
+- Unnamed: 35
+- Date of Inspection
+- Remark
+
+First row values:
+{'गीदम ': 5419.0, 'YEAR': '2025-26', 'SECTOR': 'स्वास्थ्य देखभाल', 'Work Name (in brief)': 'जिला दन्तेवाड़ा के चितालंका में नवीन शासकीय चिकित्सा महाविद्यालय भवन निर्माण कार्य', 'work name ': 'Construction work of new Government Medical College building at Chitalanka in Dantewada district', 'Gram Panchayat': 'CHITALANKA', 'Block Name ': 'DANTEWADA', 'Unnamed: 7': nan, 'UNIQ ID': nan, 'Work Id Number': nan, 'AS Number': 202537600840, ' AS Date': '16/10/2025', 'UNIQUE ID ': nan, 'Tender Date': nan, 'AS Amount (in Rs)': 36651.5, 'Evaluation  Amount (in Rs)': nan, 'Agencys Released Amount And Date': nan, 'Unnamed: 17': nan, 'Unnamed: 18': nan, 'Unnamed: 19': nan, 'Unnamed: 20': nan, 'Unnamed: 21': nan, 'Unnamed: 22': nan, 'Unnamed: 23': nan, 'Unnamed: 24': nan, 'Unnamed: 25': nan, 'Total Released Amount ': nan, 'Amount Pending as per AS': nan, 'Agency Name': 'CG Med.Ser.Corp.Limite', 'Work Completion Timelimit as per AS (in days)': 1500.0, 'Probable Date of Completion (संभावित पूर्णता तिथि) ': nan, 'Work Status': nan, 'Work %': nan, 'Photo with Date': nan, 'Work Verified on ground?': nan, 'Unnamed: 35': nan, 'Date of Inspection': nan, 'Remark': nan}

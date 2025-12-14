@@ -1,0 +1,72 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    body {
+        @apply font-sans antialiased text-gray-900;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+}
+
+.custom-marker {
+    background: transparent;
+    border: none;
+}
+
+/* Scrollbar Polish */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400;
+}
+
+/* Cluster Icon */
+.custom-cluster-icon {
+    background: transparent;
+    border: none;
+}
+
+.cluster-pin {
+    width: 40px;
+    height: 40px;
+    background-color: #3B82F6;
+    /* Blue-500 */
+    border-radius: 50%;
+    /* Circle, but looks like pin if we add arrow? User said "pin image". Let's use a circle for cluster usually, but user asked for pin. */
+    /* Let's make it a circle with a border */
+    border: 3px solid white;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+    position: relative;
+}
+
+.cluster-pin::after {
+    /* Triangle at bottom to look like pin? */
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid #3B82F6;
+}
