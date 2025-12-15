@@ -29,6 +29,11 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 async def read_users_me(current_user: models.User = Depends(auth.get_current_user)):
     return {"username": current_user.username, "role": current_user.role, "department": current_user.department}
 
+# --- Officers ---
+@router.get("/officers")
+async def get_officers(db: Session = Depends(get_db)):
+    return db.query(models.User).filter(models.User.role == "officer").all()
+
 # --- Works ---
 # Helper to parse date
 def parse_date(row, col_name):
@@ -223,7 +228,8 @@ async def get_work_locations(
         models.Work.work_code,
         models.Work.department,
         models.Work.block,
-        models.Work.panchayat
+        models.Work.panchayat,
+        models.Work.assigned_officer_id
     )
     
     # Apply Filters (Case Insensitive for string fields if needed, but usually exact match from dropdowns is fine if dropdowns are normalized? 
@@ -266,7 +272,8 @@ async def get_work_locations(
             "code": r.work_code,
             "dept": r.department,
             "block": r.block,
-            "gp": r.panchayat
+            "gp": r.panchayat,
+            "assigned": True if r.assigned_officer_id else False
         }
         for r in results
     ]
@@ -287,7 +294,7 @@ async def get_works(
     limit: int = 100,
     db: Session = Depends(get_db)
 ):
-    query = db.query(models.Work)
+    query = db.query(models.Work).options(joinedload(models.Work.assigned_officer))
     if department:
         query = query.filter(models.Work.department.ilike(department))
     if block:
@@ -433,4 +440,37 @@ async def get_work_timeline(
             "remarks": insp.remarks,
             "photos": [{"url": p.image_path} for p in insp.photos]
         })
+        })
     return timeline
+
+@router.post("/works/{work_id}/assign")
+async def assign_work(
+    work_id: int,
+    officer_id: int = Form(...),
+    deadline_days: Optional[int] = Form(None),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can assign works")
+
+    work = db.query(models.Work).filter(models.Work.id == work_id).first()
+    if not work:
+        raise HTTPException(status_code=404, detail="Work not found")
+        
+    officer = db.query(models.User).filter(models.User.id == officer_id, models.User.role == "officer").first()
+    if not officer:
+        raise HTTPException(status_code=404, detail="Officer not found")
+        
+    work.assigned_officer_id = officer_id
+    work.assignment_status = "Pending"
+    
+    if deadline_days:
+        work.inspection_deadline = datetime.utcnow() + datetime.timedelta(days=deadline_days)
+    else:
+        work.inspection_deadline = None # Or default?
+        
+    work.last_updated = datetime.utcnow()
+    db.commit()
+    
+    return {"message": f"Work assigned to {officer.username}"}

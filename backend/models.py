@@ -51,6 +51,13 @@ class Work(Base):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
 
+    # Inspection Assignment
+    assigned_officer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    inspection_deadline = Column(DateTime, nullable=True)
+    assignment_status = Column(String, default="Unassigned")  # Unassigned, Pending, Completed
+
+    # Relationships
+    assigned_officer = relationship("User", foreign_keys=[assigned_officer_id])
     photos = relationship("Photo", back_populates="work")
     inspections = relationship("Inspection", back_populates="work")
 

@@ -15,7 +15,8 @@ const COLORS = {
     RED: '#DC2626',   // Not Started
     PINK: '#EC4899',  // Payment Stuck
     BLUE: '#2563EB',  // Default Cluster
-    BROWN: '#78350F'  // Block Level Cluster
+    BROWN: '#78350F', // Block Level Cluster
+    PURPLE: '#7C3AED' // Assigned
 };
 
 const getStatusColor = (work) => {
@@ -62,6 +63,12 @@ const createCustomIcon = (work) => {
             <div className="absolute -top-1 -right-1 rounded-full shadow-md bg-white p-0.5">
                 {getStatusIconComponent(color)}
             </div>
+            {/* Assigned Badge */}
+            {work.assigned && (
+                <div className="absolute -bottom-1 -right-1 rounded-full shadow-md bg-purple-600 p-0.5 border border-white">
+                    <AlertTriangle size={12} fill="white" className="text-white" />
+                </div>
+            )}
         </div>
     );
 
@@ -80,8 +87,8 @@ const MapController = ({ works }) => {
     useEffect(() => {
         if (works && works.length > 0) {
             const markers = works
-                .filter(w => w.latitude && w.longitude)
-                .map(w => [w.latitude, w.longitude]);
+                .filter(w => (w.latitude || w.lat) && (w.longitude || w.lng))
+                .map(w => [w.latitude || w.lat, w.longitude || w.lng]);
             if (markers.length > 0) {
                 try {
                     map.fitBounds(markers, { padding: [50, 50], maxZoom: 12 });
@@ -143,7 +150,9 @@ const ClusterLayer = ({ works, onSelect }) => {
 
         // Create Markers logic
         const createMarker = (work) => {
-            const marker = L.marker([work.latitude, work.longitude], {
+            const lat = work.latitude || work.lat;
+            const lng = work.longitude || work.lng;
+            const marker = L.marker([lat, lng], {
                 icon: createCustomIcon(work),
             });
             marker.on('click', () => onSelect(work));
@@ -174,7 +183,10 @@ const ClusterLayer = ({ works, onSelect }) => {
         const gpMarkers = [];
 
         works.forEach(work => {
-            if (work.latitude && work.longitude) {
+            const lat = work.latitude || work.lat;
+            const lng = work.longitude || work.lng;
+
+            if (lat && lng) {
                 // Determine type
                 const isBlock = work.panchayat && (work.panchayat.includes('Block Level') || work.panchayat.includes('District Level'));
                 const marker = createMarker(work);
@@ -241,6 +253,12 @@ const MapLegend = () => {
                     <div className="flex items-center gap-2">
                         <div className="w-3 h-3 rounded-full bg-pink-500"></div>
                         <span>Payment Stuck</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-purple-600 flex items-center justify-center">
+                            <div className="w-1 h-1 bg-white rounded-full"></div>
+                        </div>
+                        <span>Under Inspection (Assigned)</span>
                     </div>
                 </div>
             </div>

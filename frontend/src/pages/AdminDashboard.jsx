@@ -25,6 +25,10 @@ const AdminDashboard = () => {
     const [mapWorks, setMapWorks] = useState([]); // Decoupled map data (all points)
     const [globalStats, setGlobalStats] = useState({ total: 0, completed: 0, in_progress: 0, not_started: 0 });
     const [filterOptions, setFilterOptions] = useState({ blocks: [], panchayats: [], departments: [], agencies: [], statuses: [], years: [] });
+    const [officers, setOfficers] = useState([]);
+
+    // --- State: Assignment ---
+    const [assignmentModal, setAssignmentModal] = useState({ isOpen: false, workId: null, officerId: '', days: '' });
 
     // --- State: UI & Controls ---
     const [viewMode, setViewMode] = useState('table'); // 'table' or 'map'
@@ -68,13 +72,23 @@ const AdminDashboard = () => {
         total_released_amount: false,
         amount_pending: false,
         probable_completion_date: false,
-        remark: false
+        probable_completion_date: false,
+        remark: false,
+        assignment: true // New default
     });
 
     // --- Fetch Global Data (Stats & Options) ---
     useEffect(() => {
         fetchGlobalData();
+        fetchOfficers();
     }, []);
+
+    const fetchOfficers = async () => {
+        try {
+            const res = await api.get('/officers');
+            setOfficers(res.data);
+        } catch (e) { console.error("Failed to fetch officers", e); }
+    };
 
     const fetchGlobalData = async () => {
         try {
@@ -222,6 +236,29 @@ const AdminDashboard = () => {
             console.error("Upload failed", error);
             alert(`Upload Failed: ${error.message}`);
         }
+    }
+
+
+    const handleAssignClick = (work) => {
+        setAssignmentModal({ isOpen: true, workId: work.id, officerId: work.assigned_officer_id || '', days: '' });
+    };
+
+    const submitAssignment = async () => {
+        if (!assignmentModal.workId || !assignmentModal.officerId) return;
+
+        try {
+            const formData = new FormData();
+            formData.append('officer_id', assignmentModal.officerId);
+            if (assignmentModal.days) formData.append('deadline_days', assignmentModal.days);
+
+            await api.post(`/works/${assignmentModal.workId}/assign`, formData);
+            alert('Assignment successful!');
+            setAssignmentModal({ isOpen: false, workId: null, officerId: '', days: '' });
+            fetchWorks(); // Refresh list
+        } catch (e) {
+            console.error("Assignment failed", e);
+            alert("Failed to assign work");
+        }
     };
 
     const toggleColumn = (col) => {
@@ -346,7 +383,7 @@ const AdminDashboard = () => {
                         </div>
                     </div>
 
-                    <div className="flex gap-3 w-full md:w-auto items-center overflow-x-auto pb-2 md:pb-0">
+                    <div className="flex gap-3 w-full md:w-auto items-center flex-wrap pb-2 md:pb-0">
                         {/* Dynamic Filters */}
                         <select
                             value={filters.block}
@@ -470,6 +507,7 @@ const AdminDashboard = () => {
                                                     { key: 'amount_pending', label: 'Pending' },
                                                     { key: 'probable_completion_date', label: 'Est. End' },
                                                     { key: 'remark', label: 'Remarks' },
+                                                    { key: 'assignment', label: 'Inspection Status' },
                                                 ].map((col) => (
                                                     visibleColumns[col.key] && (
                                                         <th
@@ -545,6 +583,29 @@ const AdminDashboard = () => {
                                                     {visibleColumns.amount_pending && <td className="p-4 text-sm text-red-600">₹{work.amount_pending?.toLocaleString()} Lakhs</td>}
                                                     {visibleColumns.probable_completion_date && <td className="p-4 text-sm text-gray-600">{work.probable_completion_date ? new Date(work.probable_completion_date).toLocaleDateString() : '-'}</td>}
                                                     {visibleColumns.remark && <td className="p-4 text-sm text-gray-500 italic max-w-xs truncate">{work.remark || '-'}</td>}
+                                                    {visibleColumns.assignment && (
+                                                        <td className="p-4 whitespace-nowrap">
+                                                            {work.assigned_officer ? (
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-xs font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full w-fit">
+                                                                        {work.assigned_officer.username}
+                                                                    </span>
+                                                                    {work.inspection_deadline && (
+                                                                        <span className={`text-[10px] mt-0.5 ${new Date(work.inspection_deadline) < new Date() && work.assignment_status !== 'Completed' ? 'text-red-600 font-bold' : 'text-gray-500'}`}>
+                                                                            Due: {new Date(work.inspection_deadline).toLocaleDateString()}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); handleAssignClick(work); }}
+                                                                    className="text-xs border border-dashed border-gray-400 text-gray-500 px-2 py-1 rounded hover:bg-gray-50 hover:text-blue-600 hover:border-blue-400 transition"
+                                                                >
+                                                                    + Assign
+                                                                </button>
+                                                            )}
+                                                        </td>
+                                                    )}
 
                                                     <td className="p-4 sticky right-0 bg-white group-hover:bg-blue-50/30">
                                                         <button
@@ -585,6 +646,58 @@ const AdminDashboard = () => {
                 isOpen={isDrawerOpen}
                 onClose={() => setIsDrawerOpen(false)}
             />
+
+            {/* Assignment Modal */}
+            {assignmentModal.isOpen && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
+                        <h3 className="text-lg font-bold mb-4">Assign Inspection</h3>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Select Officer</label>
+                                <select
+                                    className="w-full border rounded-lg p-2 text-sm"
+                                    value={assignmentModal.officerId}
+                                    onChange={(e) => setAssignmentModal(prev => ({ ...prev, officerId: e.target.value }))}
+                                >
+                                    <option value="">-- Choose Officer --</option>
+                                    {officers.map(off => (
+                                        <option key={off.id} value={off.id}>{off.username} ({off.department || 'General'})</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Deadline (Days from now)</label>
+                                <input
+                                    type="number"
+                                    placeholder="e.g. 7 (Leave empty for none)"
+                                    className="w-full border rounded-lg p-2 text-sm"
+                                    value={assignmentModal.days}
+                                    onChange={(e) => setAssignmentModal(prev => ({ ...prev, days: e.target.value }))}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="mt-6 flex gap-3 justify-end">
+                            <button
+                                onClick={() => setAssignmentModal({ isOpen: false, workId: null, officerId: '', days: '' })}
+                                className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-100 rounded-lg text-sm"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={submitAssignment}
+                                disabled={!assignmentModal.officerId}
+                                className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+                            >
+                                Assign
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
