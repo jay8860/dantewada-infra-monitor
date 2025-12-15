@@ -51,9 +51,12 @@ const OfficerDashboard = () => {
         setPendingCount(pending.length);
     };
 
+    const [usingManualLoc, setUsingManualLoc] = useState(false);
+
     const getLocation = () => {
         if (!navigator.geolocation) {
             alert('Geolocation is not supported by your browser');
+            setUsingManualLoc(true);
             return;
         }
         navigator.geolocation.getCurrentPosition(
@@ -62,11 +65,27 @@ const OfficerDashboard = () => {
                     latitude: position.coords.latitude,
                     longitude: position.coords.longitude
                 });
+                setUsingManualLoc(false);
             },
             (error) => {
-                alert('Unable to retrieve your location');
-            }
+                console.error("GPS Error:", error);
+                let msg = "Unable to retrieve location.";
+                if (error.code === 1) msg = "Location permission denied. Please enable it or enter manually.";
+                if (error.code === 2) msg = "Location unavailable.";
+                if (error.code === 3) msg = "Location request timed out.";
+                alert(msg + " You can enter coordinates manually.");
+                setUsingManualLoc(true);
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
         );
+    };
+
+    const handleManualLocChange = (e) => {
+        const { name, value } = e.target;
+        setLocation(prev => ({
+            ...prev,
+            [name]: parseFloat(value) || 0
+        }));
     };
 
     const handlePhotoChange = (e) => {
@@ -201,13 +220,42 @@ const OfficerDashboard = () => {
 
                             <div className="border p-3 rounded bg-gray-50">
                                 <label className="block text-sm font-semibold mb-2">Location Evidence</label>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-xs text-gray-500">
-                                        {location ? `Lat: ${location.latitude.toFixed(4)}, Long: ${location.longitude.toFixed(4)}` : "Location required"}
-                                    </span>
-                                    <button type="button" onClick={getLocation} className="flex gap-1 items-center bg-blue-100 text-blue-700 px-3 py-1 rounded text-sm hover:bg-blue-200">
-                                        <MapPin size={14} /> Get GPS
-                                    </button>
+                                <div className="flex flex-col gap-2">
+                                    <div className="flex justify-between items-center">
+                                        <div className="text-xs text-gray-500">
+                                            {location && !usingManualLoc ?
+                                                <span className="text-green-600 font-mono">✓ {location.latitude.toFixed(5)}, {location.longitude.toFixed(5)}</span>
+                                                : "Location required"
+                                            }
+                                        </div>
+                                        <button type="button" onClick={getLocation} className="flex gap-1 items-center bg-blue-100 text-blue-700 px-3 py-1 rounded text-sm hover:bg-blue-200">
+                                            <MapPin size={14} /> Get GPS
+                                        </button>
+                                    </div>
+
+                                    {usingManualLoc && (
+                                        <div className="space-y-2 animate-in slide-in-from-top-2">
+                                            <p className="text-xs text-red-500">GPS failed. Enter coordinates manually:</p>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <input
+                                                    type="number"
+                                                    name="latitude"
+                                                    placeholder="Latitude"
+                                                    value={location?.latitude || ''}
+                                                    onChange={handleManualLocChange}
+                                                    className="border p-2 rounded text-sm w-full"
+                                                />
+                                                <input
+                                                    type="number"
+                                                    name="longitude"
+                                                    placeholder="Longitude"
+                                                    value={location?.longitude || ''}
+                                                    onChange={handleManualLocChange}
+                                                    className="border p-2 rounded text-sm w-full"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
