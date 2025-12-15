@@ -70,38 +70,36 @@ async def upload_works(
         # Normalize columns: strip whitespace
         df.columns = df.columns.astype(str).str.strip()
         
-        count = 0
+        # 1. Fetch all existing work codes to minimize queries
+        all_existing_codes = {res[0] for res in db.query(models.Work.work_code).all()}
+        
+        to_insert = []
+        to_update = []
+        
+        # Process DataFrame
         for _, row in df.iterrows():
-            # Check if work exists
-            # Map "Work Id Number" or "work_code"
-            # User provided: "Work Id Number"
+             # Map "Work Id Number" or "work_code"
             work_code = str(row.get('Work Id Number') or row.get('work_code') or '')
             
             # Basic validation
             if not work_code or work_code.lower() == 'nan':
-                 # Fallback to UNIQ ID if Work Id Number missing?
-                 # User has "UNIQ ID" and "UNIQUE ID"
                  work_code = str(row.get('UNIQ ID') or row.get('UNIQUE ID') or '')
             
             if (not work_code or work_code.lower() == 'nan') and row.get('AS Number'):
-                 # Fallback to AS Number
-                 # Handle float conversion safely: "2025... .0" -> "2025..."
                  as_num = str(row.get('AS Number'))
                  if as_num.endswith('.0'):
                      as_num = as_num[:-2]
                  work_code = as_num
 
             if not work_code or work_code.lower() == 'nan':
-                # Skip if absolutely no identifier
                 continue
 
             if work_code.endswith('.0'):
                 work_code = work_code[:-2]
 
-            existing = db.query(models.Work).filter(models.Work.work_code == work_code).first()
-            
-            # Mapping Data (User's Exact Headers)
+            # Mapping Data
             data = {
+               'work_code': work_code, # Required for ID
                'department': row.get('SECTOR') or row.get('Sector') or row.get('department'),
                'financial_year': str(row.get('YEAR') or row.get('financial_year') or ''),
                'block': row.get('Block Name') or row.get('block'),
@@ -125,29 +123,46 @@ async def upload_works(
                'verified_on_ground': row.get('Work Verified on ground?'),
                'inspection_date': parse_date(row, 'Date of Inspection'),
                'remark': row.get('Remark'),
-               'csv_photo_info': str(row.get('Photo with Date') or ''), # New field
+               'csv_photo_info': str(row.get('Photo with Date') or ''), 
                'latitude': float(row.get('latitude')) if 'latitude' in row and pd.notna(row.get('latitude')) else None,
                'longitude': float(row.get('longitude')) if 'longitude' in row and pd.notna(row.get('longitude')) else None
             }
 
-            if existing:
-                # Update all fields
-                for key, value in data.items():
-                    if value is not None: 
-                        setattr(existing, key, value)
-                count += 1
-                continue
-                
-            new_work = models.Work(
-                work_code=work_code,
-                **data
-            )
-            db.add(new_work)
-            db.flush() # Make visible for duplicate checks within same file
-            count += 1
+            if work_code in all_existing_codes:
+                # Update logic is tricky with bulk_update unless we have Primary Key ID.
+                # models.Work.work_code is likely unique but not PK? ID is PK.
+                # Bulk update by non-PK is hard in ORM.
+                # Fallback: For updates, we might need individual queries OR fetch ID map.
+                # Let's fetch {work_code: id} map.
+                pass 
+                # For now, put in to_update list, will handle below
+                to_update.append(data)
+            else:
+                to_insert.append(data)
         
+        # 2. Bulk Insert
+        if to_insert:
+            db.bulk_insert_mappings(models.Work, to_insert)
+            
+        # 3. Bulk Update (Optimization)
+        # SQLAlchemy bulk_update_mappings requires Primary Key 'id' to be in the dict.
+        # We only have 'work_code'.
+        # Efficient Strategy: Fetch {work_code: id} mapping for all existing items.
+        
+        if to_update:
+            code_to_id = {w.work_code: w.id for w in db.query(models.Work.id, models.Work.work_code).all()}
+            
+            final_updates = []
+            for item in to_update:
+                if item['work_code'] in code_to_id:
+                    item['id'] = code_to_id[item['work_code']]
+                    final_updates.append(item)
+            
+            if final_updates:
+                 db.bulk_update_mappings(models.Work, final_updates)
+
         db.commit()
-        return {"message": f"Successfully uploaded {count} works"}
+        return {"message": f"Successfully processed {len(df)} works (Inserted: {len(to_insert)}, Updated: {len(to_update)})"}
     except Exception as e:
         import traceback
         traceback.print_exc()
