@@ -182,9 +182,16 @@ async def get_works(
         query = query.filter(models.Work.department == department)
     if block:
         query = query.filter(models.Work.block == block)
+    if block:
+        query = query.filter(models.Work.block == block)
     return query.offset(skip).limit(limit).all()
 
-    return {"message": "Work updated successfully", "image_url": file_path}
+@router.get("/works/{work_id}")
+async def get_work(work_id: int, db: Session = Depends(get_db)):
+    work = db.query(models.Work).filter(models.Work.id == work_id).first()
+    if not work:
+        raise HTTPException(status_code=404, detail="Work not found")
+    return work
 
 @router.post("/works/{work_id}/inspections")
 async def create_inspection(

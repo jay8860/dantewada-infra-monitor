@@ -5,14 +5,27 @@ import api from '../api';
 const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
     const [timeline, setTimeline] = useState([]);
     const [loadingTimeline, setLoadingTimeline] = useState(false);
+    const [fullWork, setFullWork] = useState(null); // Full details including photos
 
     useEffect(() => {
         if (work && isOpen) {
+            setFullWork(work); // Initialize with props
+            fetchFullDetails();
             fetchTimeline();
         } else {
             setTimeline([]);
+            setFullWork(null);
         }
     }, [work, isOpen]);
+
+    const fetchFullDetails = async () => {
+        try {
+            const res = await api.get(`/works/${work.id}`);
+            setFullWork(res.data);
+        } catch (err) {
+            console.error("Failed to fetch full work details", err);
+        }
+    };
 
     const fetchTimeline = async () => {
         setLoadingTimeline(true);
@@ -35,7 +48,9 @@ const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
         return 'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&w=800&q=80'; // Default Construction
     };
 
-    if (!work) return null;
+    const displayWork = fullWork || work;
+
+    if (!displayWork) return null;
 
     return (
         <div className={`fixed inset-y-0 right-0 z-[1000] w-full md:w-[480px] bg-white shadow-2xl transform transition-transform duration-300 ease-in-out flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
@@ -43,7 +58,7 @@ const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
             {/* Lively Header Image */}
             <div className="h-40 w-full relative shrink-0">
                 <img
-                    src={getWorkImage(work.work_name)}
+                    src={getWorkImage(displayWork.work_name)}
                     alt="Work Category"
                     className="w-full h-full object-cover"
                 />
@@ -56,9 +71,9 @@ const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
             {/* Header Text */}
             <div className="bg-blue-900 text-white px-6 pb-6 pt-2 shrink-0 relative z-10 -mt-2">
                 <div>
-                    <h2 className="text-xl font-bold leading-tight shadow-black drop-shadow-md">{work.work_name}</h2>
+                    <h2 className="text-xl font-bold leading-tight shadow-black drop-shadow-md">{displayWork.work_name}</h2>
                     <p className="text-blue-200 text-sm mt-1 flex items-center gap-2">
-                        <span className="bg-blue-800 px-2 py-0.5 rounded text-xs border border-blue-700">{work.work_code}</span>
+                        <span className="bg-blue-800 px-2 py-0.5 rounded text-xs border border-blue-700">{displayWork.work_code}</span>
                     </p>
                 </div>
             </div>
@@ -67,14 +82,14 @@ const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
             <div className="flex-1 overflow-y-auto p-6">
                 {/* Status Badge */}
                 <div className="mb-6 flex justify-between items-center">
-                    <span className={`px-3 py-1 rounded-full text-sm font-bold uppercase tracking-wide ${work.current_status === 'Completed' ? 'bg-green-100 text-green-800' :
-                        work.current_status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
+                    <span className={`px-3 py-1 rounded-full text-sm font-bold uppercase tracking-wide ${displayWork.current_status === 'Completed' ? 'bg-green-100 text-green-800' :
+                        displayWork.current_status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
                             'bg-red-100 text-red-800'
                         }`}>
-                        {work.current_status}
+                        {displayWork.current_status}
                     </span>
                     <span className="text-xs text-gray-500">
-                        Last Updated: {new Date(work.last_updated).toLocaleDateString()}
+                        Last Updated: {new Date(displayWork.last_updated).toLocaleDateString()}
                     </span>
                 </div>
 
@@ -147,32 +162,32 @@ const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <p className="text-xs text-gray-400">Unique ID</p>
-                                <p className="text-sm font-medium">{work.unique_id || '-'}</p>
+                                <p className="text-sm font-medium">{displayWork.unique_id || '-'}</p>
                             </div>
                             <div>
                                 <p className="text-xs text-gray-400">Brief Name</p>
-                                <p className="text-sm font-medium">{work.work_name_brief || '-'}</p>
+                                <p className="text-sm font-medium">{displayWork.work_name_brief || '-'}</p>
                             </div>
                             <div>
                                 <p className="text-xs text-gray-400">Panchayat / Block</p>
-                                <p className="text-sm font-medium">{work.panchayat}, {work.block}</p>
+                                <p className="text-sm font-medium">{displayWork.panchayat}, {displayWork.block}</p>
                             </div>
                             <div>
                                 <p className="text-xs text-gray-400">Financial Year</p>
-                                <p className="text-sm font-medium">{work.financial_year}</p>
+                                <p className="text-sm font-medium">{displayWork.financial_year}</p>
                             </div>
                             <div>
                                 <p className="text-xs text-gray-400">Verified?</p>
-                                <p className="text-sm font-medium">{work.verified_on_ground || '-'}</p>
+                                <p className="text-sm font-medium">{displayWork.verified_on_ground || '-'}</p>
                             </div>
                             <div>
                                 <p className="text-xs text-gray-400">Physical Progress</p>
-                                <p className="text-sm font-medium">{work.work_percentage || '-'}</p>
+                                <p className="text-sm font-medium">{displayWork.work_percentage || '-'}</p>
                             </div>
                         </div>
-                        {work.csv_photo_info && (
+                        {displayWork.csv_photo_info && (
                             <p className="text-xs text-gray-500 mt-2 bg-yellow-50 p-2 rounded border border-yellow-100">
-                                <span className="font-semibold">Imported Photo Data:</span> {work.csv_photo_info}
+                                <span className="font-semibold">Imported Photo Data:</span> {displayWork.csv_photo_info}
                             </p>
                         )}
                     </div>
@@ -185,22 +200,22 @@ const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
                         <div className="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-lg border">
                             <div>
                                 <p className="text-xs text-gray-400">AS Amount</p>
-                                <p className="text-sm font-bold text-blue-900">₹{work.sanctioned_amount?.toLocaleString()} Lakhs</p>
+                                <p className="text-sm font-bold text-blue-900">₹{displayWork.sanctioned_amount?.toLocaleString()} Lakhs</p>
                             </div>
                             <div>
                                 <p className="text-xs text-gray-400">Evaluation Amt</p>
-                                <p className="text-sm font-bold text-gray-700">₹{work.evaluation_amount?.toLocaleString() || '-'} Lakhs</p>
+                                <p className="text-sm font-bold text-gray-700">₹{displayWork.evaluation_amount?.toLocaleString() || '-'} Lakhs</p>
                             </div>
                             <div>
                                 <p className="text-xs text-gray-400">Total Released</p>
-                                <p className="text-sm font-bold text-green-700">₹{work.total_released_amount?.toLocaleString() || '-'} Lakhs</p>
+                                <p className="text-sm font-bold text-green-700">₹{displayWork.total_released_amount?.toLocaleString() || '-'} Lakhs</p>
                             </div>
                             <div>
                                 <p className="text-xs text-gray-400">Pending Amt</p>
-                                <p className="text-sm font-bold text-red-700">₹{work.amount_pending?.toLocaleString() || '-'} Lakhs</p>
+                                <p className="text-sm font-bold text-red-700">₹{displayWork.amount_pending?.toLocaleString() || '-'} Lakhs</p>
                             </div>
                         </div>
-                        <p className="text-xs text-gray-500 mt-2 italic">Released Details: {work.agency_release_details || 'N/A'}</p>
+                        <p className="text-xs text-gray-500 mt-2 italic">Released Details: {displayWork.agency_release_details || 'N/A'}</p>
                     </div>
 
                     <hr className="border-dashed" />
@@ -211,23 +226,23 @@ const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
                         <div className="space-y-2">
                             <div className="flex justify-between">
                                 <span className="text-sm text-gray-500">Agency Name</span>
-                                <span className="text-sm font-medium text-right">{work.agency_name || '-'}</span>
+                                <span className="text-sm font-medium text-right">{displayWork.agency_name || '-'}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-sm text-gray-500">AS Number</span>
-                                <span className="text-sm font-medium text-right">{work.as_number || '-'}</span>
+                                <span className="text-sm font-medium text-right">{displayWork.as_number || '-'}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-sm text-gray-500">AS Date</span>
-                                <span className="text-sm font-medium text-right">{work.sanctioned_date ? new Date(work.sanctioned_date).toLocaleDateString() : '-'}</span>
+                                <span className="text-sm font-medium text-right">{displayWork.sanctioned_date ? new Date(displayWork.sanctioned_date).toLocaleDateString() : '-'}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-sm text-gray-500">Tender Date</span>
-                                <span className="text-sm font-medium text-right">{work.tender_date ? new Date(work.tender_date).toLocaleDateString() : '-'}</span>
+                                <span className="text-sm font-medium text-right">{displayWork.tender_date ? new Date(displayWork.tender_date).toLocaleDateString() : '-'}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-sm text-gray-500">Probable Completion</span>
-                                <span className="text-sm font-medium text-right">{work.probable_completion_date ? new Date(work.probable_completion_date).toLocaleDateString() : '-'}</span>
+                                <span className="text-sm font-medium text-right">{displayWork.probable_completion_date ? new Date(displayWork.probable_completion_date).toLocaleDateString() : '-'}</span>
                             </div>
                         </div>
                     </div>
@@ -242,8 +257,8 @@ const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
                     </h3>
 
                     <div className="grid grid-cols-2 gap-2">
-                        {work.photos && work.photos.length > 0 ? (
-                            work.photos.map((photo, idx) => (
+                        {displayWork.photos && displayWork.photos.length > 0 ? (
+                            displayWork.photos.map((photo, idx) => (
                                 <div key={photo.id} className="relative group rounded-lg overflow-hidden border">
                                     <img
                                         src={`${(import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace('/api', '')}/${photo.image_path}`}
