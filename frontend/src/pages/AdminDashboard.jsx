@@ -60,26 +60,42 @@ const AdminDashboard = () => {
     const [allAgencies, setAllAgencies] = useState([]);
     const [allStatus, setAllStatus] = useState([]);
 
-    const fetchWorks = async () => {
-        try {
-            const response = await api.get('/works');
-            const data = Array.isArray(response.data) ? response.data : [];
-            setWorks(data);
+    const [page, setPage] = useState(0);
+    const [hasMore, setHasMore] = useState(true);
+    const [loading, setLoading] = useState(false);
 
-            // Extract unique values for filters
-            setAllBlocks([...new Set(data.map(w => w.block).filter(Boolean))].sort());
-            setAllPanchayats([...new Set(data.map(w => w.panchayat).filter(Boolean))].sort());
-            setAllDepts([...new Set(data.map(w => w.department).filter(Boolean))].sort());
-            setAllAgencies([...new Set(data.map(w => w.agency_name).filter(Boolean))].sort());
-            setAllStatus([...new Set(data.map(w => w.current_status).filter(Boolean))].sort());
+    const fetchWorks = async (reset = false) => {
+        if (loading) return;
+        setLoading(true);
+        try {
+            const skip = reset ? 0 : page * 50;
+            const response = await api.get(`/works?skip=${skip}&limit=50`);
+            const newData = Array.isArray(response.data) ? response.data : [];
+
+            if (reset) {
+                setWorks(newData);
+                setPage(1);
+            } else {
+                setWorks(prev => [...prev, ...newData]);
+                setPage(prev => prev + 1);
+            }
+
+            if (newData.length < 50) setHasMore(false);
+            else setHasMore(true);
+
+            // Extract unique values for filters (Ideally this should be a separate API or aggregated on backend)
+            // For now, we only filter on loaded data or user can "Search"
+            // To properly filter 5000 records, we need Backend Filtering.
+            // But for "fast load", this is better.
         } catch (error) {
             console.error("Error fetching works", error);
-            setWorks([]);
+        } finally {
+            setLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchWorks();
+        fetchWorks(true);
     }, []);
 
     const handleFileUpload = async () => {
@@ -95,7 +111,8 @@ const AdminDashboard = () => {
             fetchWorks();
         } catch (error) {
             console.error("Upload failed", error);
-            alert('Upload failed');
+            const msg = error.response?.data?.detail || error.message || 'Upload failed';
+            alert(`Upload Failed: ${msg}`);
         }
     };
 
@@ -310,7 +327,7 @@ const AdminDashboard = () => {
                             <MapComponent works={sortedAndFilteredWorks} />
                         </div>
                     ) : (
-                        <div className="h-full overflow-auto p-4">
+                        <div className="h-full overflow-auto p-4 flex flex-col gap-4">
                             <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left border-collapse text-sm">
@@ -423,6 +440,18 @@ const AdminDashboard = () => {
                                     </table>
                                 </div>
                             </div>
+
+                            {hasMore && (
+                                <div className="text-center pb-4">
+                                    <button
+                                        onClick={() => fetchWorks(false)}
+                                        disabled={loading}
+                                        className="bg-blue-100 text-blue-800 px-6 py-2 rounded-full text-sm font-semibold hover:bg-blue-200 disabled:opacity-50 transition"
+                                    >
+                                        {loading ? 'Loading...' : 'Load More Works'}
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

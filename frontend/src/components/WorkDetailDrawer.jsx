@@ -124,7 +124,7 @@ const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
                                             {event.photos.map((photo, pIdx) => (
                                                 <img
                                                     key={pIdx}
-                                                    src={`http://localhost:8000/${photo.url}`}
+                                                    src={`${(import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace('/api', '')}/${photo.url}`}
                                                     alt="Inspection"
                                                     className="w-20 h-20 object-cover rounded border hover:scale-105 transition-transform"
                                                 />
@@ -246,7 +246,7 @@ const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
                             work.photos.map((photo, idx) => (
                                 <div key={photo.id} className="relative group rounded-lg overflow-hidden border">
                                     <img
-                                        src={`http://localhost:8000/${photo.image_path}`}
+                                        src={`${(import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace('/api', '')}/${photo.image_path}`}
                                         alt={`Site Photo ${idx + 1}`}
                                         className="w-full h-32 object-cover transition-transform group-hover:scale-105"
                                     />

@@ -173,6 +173,8 @@ async def upload_works(
 async def get_works(
     department: Optional[str] = None, 
     block: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 50,
     db: Session = Depends(get_db)
 ):
     query = db.query(models.Work)
@@ -180,7 +182,7 @@ async def get_works(
         query = query.filter(models.Work.department == department)
     if block:
         query = query.filter(models.Work.block == block)
-    return query.all()
+    return query.offset(skip).limit(limit).all()
 
     return {"message": "Work updated successfully", "image_url": file_path}
 
@@ -233,14 +235,16 @@ async def create_inspection(
             )
             db.add(new_photo)
             
-        # Update Work's current status and lat/long to reflect latest inspection
-        work.current_status = status
-        work.last_updated = datetime.utcnow()
+        # Update Work's latitude/longitude to reflect latest inspection location (useful for tracking)
+        # BUT DO NOT update current_status automatically. Admin must approve.
         work.latitude = latitude
         work.longitude = longitude
-        # Also update verified status? User said "Verified on ground?"
+        # Also update verified status? User said "Verified on ground?" - keeping this as it reflects field reality
         work.verified_on_ground = "Yes"
+        # work.inspection_date = datetime.utcnow() # Maybe keep this? Or only on approval? 
+        # Let's keep inspection_date as "last visited".
         work.inspection_date = datetime.utcnow()
+        work.last_updated = datetime.utcnow()
         
         db.commit()
         return {"message": "Inspection submitted successfully"}
