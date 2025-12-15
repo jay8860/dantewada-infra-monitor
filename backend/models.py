@@ -52,12 +52,29 @@ class Work(Base):
     longitude = Column(Float, nullable=True)
 
     photos = relationship("Photo", back_populates="work")
+    inspections = relationship("Inspection", back_populates="work")
+
+class Inspection(Base):
+    __tablename__ = "inspections"
+
+    id = Column(Integer, primary_key=True, index=True)
+    work_id = Column(Integer, ForeignKey("works.id"))
+    inspector_name = Column(String)
+    status_at_time = Column(String)
+    remarks = Column(String, nullable=True)
+    latitude = Column(Float)
+    longitude = Column(Float)
+    inspection_date = Column(DateTime, default=datetime.datetime.utcnow)
+
+    work = relationship("Work", back_populates="inspections")
+    photos = relationship("Photo", back_populates="inspection")
 
 class Photo(Base):
     __tablename__ = "photos"
 
     id = Column(Integer, primary_key=True, index=True)
     work_id = Column(Integer, ForeignKey("works.id"))
+    inspection_id = Column(Integer, ForeignKey("inspections.id"), nullable=True)
     image_path = Column(String)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
     
@@ -68,3 +85,4 @@ class Photo(Base):
     uploaded_by = Column(String) # Username
     
     work = relationship("Work", back_populates="photos")
+    inspection = relationship("Inspection", back_populates="photos")
