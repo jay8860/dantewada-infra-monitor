@@ -1,26 +1,56 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../api';
 import MapComponent from '../components/MapComponent';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { LayoutDashboard, MapPin, Upload, LogOut, Search, Filter, ArrowUpDown } from 'lucide-react';
+import { LayoutDashboard, MapPin, Upload, LogOut, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import WorkDetailDrawer from '../components/WorkDetailDrawer';
+
+// Debounce helper
+const useDebounce = (value, delay) => {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+    useEffect(() => {
+        const handler = setTimeout(() => setDebouncedValue(value), delay);
+        return () => clearTimeout(handler);
+    }, [value, delay]);
+    return debouncedValue;
+};
 
 const AdminDashboard = () => {
     const { logout } = useAuth();
     const navigate = useNavigate();
+
+    // --- State: Data ---
     const [works, setWorks] = useState([]);
-    const [file, setFile] = useState(null);
+    const [globalStats, setGlobalStats] = useState({ total: 0, completed: 0, in_progress: 0, not_started: 0 });
+    const [filterOptions, setFilterOptions] = useState({ blocks: [], departments: [], agencies: [], statuses: [], years: [] });
+
+    // --- State: UI & Controls ---
     const [viewMode, setViewMode] = useState('table'); // 'table' or 'map'
     const [selectedWork, setSelectedWork] = useState(null);
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [file, setFile] = useState(null);
+    const [showColumnMenu, setShowColumnMenu] = useState(false);
 
-    const handleViewDetails = (work) => {
-        setSelectedWork(work);
-        setIsDrawerOpen(true);
-    };
+    // --- State: Filters & Pagination ---
+    const [filters, setFilters] = useState({
+        block: '',
+        department: '',
+        status: '',
+        agency: '',
+        year: ''
+    });
+    const [searchTerm, setSearchTerm] = useState('');
+    const debouncedSearch = useDebounce(searchTerm, 500);
 
-    // Column Visibility State
+    const [pagination, setPagination] = useState({
+        page: 1,
+        limit: 100, // User requested ~100 rows per page
+        total: 0,
+        totalPages: 0
+    });
+
     const [visibleColumns, setVisibleColumns] = useState({
         work_name: true,
         department: true,
@@ -32,71 +62,92 @@ const AdminDashboard = () => {
         financial_year: false,
         total_released_amount: false,
         amount_pending: false,
-        completion_timelimit_days: false,
         probable_completion_date: false,
         remark: false
     });
 
-    const [showColumnMenu, setShowColumnMenu] = useState(false);
+    // --- Fetch Global Data (Stats & Options) ---
+    useEffect(() => {
+        fetchGlobalData();
+    }, []);
 
-    const toggleColumn = (col) => {
-        setVisibleColumns(prev => ({ ...prev, [col]: !prev[col] }));
+    const fetchGlobalData = async () => {
+        try {
+            const [statsRes, filtersRes] = await Promise.all([
+                api.get('/works/stats'),
+                api.get('/works/filters')
+            ]);
+            setGlobalStats(statsRes.data);
+            setFilterOptions(filtersRes.data);
+        } catch (error) {
+            console.error("Failed to fetch global data", error);
+        }
     };
 
-    // Filter & Sort State
-    const [searchTerm, setSearchTerm] = useState('');
-    const [filters, setFilters] = useState({
-        block: '',
-        panchayat: '',
-        department: '',
-        status: '',
-        agency: ''
-    });
-    const [sortConfig, setSortConfig] = useState({ key: 'last_updated', direction: 'desc' });
-
-    const [allBlocks, setAllBlocks] = useState([]);
-    const [allPanchayats, setAllPanchayats] = useState([]);
-    const [allDepts, setAllDepts] = useState([]);
-    const [allAgencies, setAllAgencies] = useState([]);
-    const [allStatus, setAllStatus] = useState([]);
-
-    const [page, setPage] = useState(0);
-    const [hasMore, setHasMore] = useState(true);
-    const [loading, setLoading] = useState(false);
-
-    const fetchWorks = async (reset = false) => {
-        if (loading) return;
+    // --- Fetch Works (Paginated & Filtered) ---
+    const fetchWorks = useCallback(async () => {
         setLoading(true);
         try {
-            const skip = reset ? 0 : page * 50;
-            const response = await api.get(`/works?skip=${skip}&limit=50`);
-            const newData = Array.isArray(response.data) ? response.data : [];
+            const params = {
+                skip: (pagination.page - 1) * pagination.limit,
+                limit: pagination.limit,
+                ...filters,
+            };
 
-            if (reset) {
-                setWorks(newData);
-                setPage(1);
-            } else {
-                setWorks(prev => [...prev, ...newData]);
-                setPage(prev => prev + 1);
+            if (debouncedSearch) {
+                params.search = debouncedSearch;
             }
 
-            if (newData.length < 50) setHasMore(false);
-            else setHasMore(true);
+            // Remove empty filters
+            Object.keys(params).forEach(key => {
+                if (params[key] === '' || params[key] === null) delete params[key];
+            });
 
-            // Extract unique values for filters (Ideally this should be a separate API or aggregated on backend)
-            // For now, we only filter on loaded data or user can "Search"
-            // To properly filter 5000 records, we need Backend Filtering.
-            // But for "fast load", this is better.
+            const response = await api.get('/works', { params });
+
+            // Read Total Count from Headers
+            const totalCount = parseInt(response.headers['x-total-count'] || '0', 10);
+
+            setWorks(response.data);
+            setPagination(prev => ({
+                ...prev,
+                total: totalCount,
+                totalPages: Math.ceil(totalCount / prev.limit)
+            }));
+
         } catch (error) {
             console.error("Error fetching works", error);
         } finally {
             setLoading(false);
         }
+    }, [pagination.page, pagination.limit, filters, debouncedSearch]);
+
+    // Trigger fetch on filter/page/search change
+    useEffect(() => {
+        fetchWorks();
+    }, [fetchWorks]);
+
+    // Reset Page on Filter Change
+    useEffect(() => {
+        setPagination(prev => ({ ...prev, page: 1 }));
+    }, [filters, debouncedSearch]);
+
+    // --- Handlers ---
+    const handleViewDetails = (work) => {
+        setSelectedWork(work);
+        setIsDrawerOpen(true);
     };
 
-    useEffect(() => {
-        fetchWorks(true);
-    }, []);
+    const handleLogout = () => {
+        logout();
+        navigate('/login');
+    };
+
+    const handlePageChange = (newPage) => {
+        if (newPage >= 1 && newPage <= pagination.totalPages) {
+            setPagination(prev => ({ ...prev, page: newPage }));
+        }
+    };
 
     const handleFileUpload = async () => {
         if (!file) return;
@@ -109,73 +160,75 @@ const AdminDashboard = () => {
             alert('File uploaded successfully');
             setFile(null);
             fetchWorks();
+            fetchGlobalData(); // Update stats too
         } catch (error) {
             console.error("Upload failed", error);
-            const msg = error.response?.data?.detail || error.message || 'Upload failed';
-            alert(`Upload Failed: ${msg}`);
+            alert(`Upload Failed: ${error.message}`);
         }
     };
 
-    const handleLogout = () => {
-        logout();
-        navigate('/login');
+    const toggleColumn = (col) => {
+        setVisibleColumns(prev => ({ ...prev, [col]: !prev[col] }));
     };
 
-    const handleSort = (key) => {
-        let direction = 'asc';
-        if (sortConfig.key === key && sortConfig.direction === 'asc') {
-            direction = 'desc';
-        }
-        setSortConfig({ key, direction });
-    };
+    // --- Render Pagination Controls ---
+    const renderPagination = () => {
+        if (pagination.totalPages <= 1) return null;
 
-    const sortedAndFilteredWorks = useMemo(() => {
-        let items = [...works];
+        let pages = [];
+        // Show limited pages: 1 .. current-1, current, current+1 .. last
+        const { page, totalPages } = pagination;
 
-        // Filter
-        if (searchTerm) {
-            const term = searchTerm.toLowerCase();
-            items = items.filter(w =>
-                w.work_name?.toLowerCase().includes(term) ||
-                w.work_code?.toLowerCase().includes(term)
-            );
-        }
-        if (filters.block) items = items.filter(w => w.block === filters.block);
-        if (filters.panchayat) items = items.filter(w => w.panchayat === filters.panchayat);
-        if (filters.department) items = items.filter(w => w.department === filters.department);
-        if (filters.status) items = items.filter(w => w.current_status === filters.status);
-        if (filters.agency) items = items.filter(w => w.agency_name === filters.agency);
-
-        // Sort
-        items.sort((a, b) => {
-            let aVal = a[sortConfig.key];
-            let bVal = b[sortConfig.key];
-
-            if (sortConfig.key === 'last_updated' || sortConfig.key === 'sanctioned_date') {
-                aVal = new Date(aVal || 0).getTime();
-                bVal = new Date(bVal || 0).getTime();
-            } else if (typeof aVal === 'string') {
-                aVal = aVal.toLowerCase();
-                bVal = bVal.toLowerCase();
+        if (totalPages <= 7) {
+            pages = Array.from({ length: totalPages }, (_, i) => i + 1);
+        } else {
+            if (page <= 4) {
+                pages = [1, 2, 3, 4, 5, '...', totalPages];
+            } else if (page >= totalPages - 3) {
+                pages = [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+            } else {
+                pages = [1, '...', page - 1, page, page + 1, '...', totalPages];
             }
+        }
 
-            if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-            if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-            return 0;
-        });
+        return (
+            <div className="flex items-center justify-center gap-2 py-4">
+                <button
+                    onClick={() => handlePageChange(page - 1)}
+                    disabled={page === 1}
+                    className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30"
+                >
+                    <ChevronLeft size={16} />
+                </button>
 
-        return items;
-    }, [works, searchTerm, filters, sortConfig]);
+                {pages.map((p, i) => (
+                    <button
+                        key={i}
+                        onClick={() => typeof p === 'number' && handlePageChange(p)}
+                        className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm font-medium transition
+                            ${p === page ? 'bg-blue-600 text-white' : 'hover:bg-gray-100 text-gray-600'}
+                            ${typeof p !== 'number' ? 'cursor-default' : ''}
+                        `}
+                        disabled={typeof p !== 'number'}
+                    >
+                        {p}
+                    </button>
+                ))}
 
-    const stats = {
-        total: works.length,
-        completed: works.filter(w => w.current_status === 'Completed').length,
-        inProgress: works.filter(w => w.current_status === 'In Progress').length,
-        notStarted: works.filter(w => w.current_status === 'Not Started').length
+                <button
+                    onClick={() => handlePageChange(page + 1)}
+                    disabled={page === totalPages}
+                    className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30"
+                >
+                    <ChevronRight size={16} />
+                </button>
+            </div>
+        );
     };
 
     return (
         <div className="flex flex-col h-screen bg-gray-50 text-gray-800 font-sans">
+            {/* Header with Global Stats */}
             <header className="bg-white border-b sticky top-0 z-30 px-6 py-3 flex justify-between items-center shadow-sm">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center font-bold text-gray-500 text-xs">LOGOS</div>
@@ -187,15 +240,15 @@ const AdminDashboard = () => {
                 <div className="flex items-center gap-6">
                     <div className="hidden md:flex gap-6 text-sm">
                         <div className="flex flex-col items-center">
-                            <span className="font-bold text-gray-900">{stats.total}</span>
+                            <span className="font-bold text-gray-900">{globalStats.total?.toLocaleString() || 0}</span>
                             <span className="text-[10px] text-gray-500 uppercase">Total Works</span>
                         </div>
                         <div className="flex flex-col items-center">
-                            <span className="font-bold text-green-600">{stats.completed}</span>
+                            <span className="font-bold text-green-600">{globalStats.completed?.toLocaleString() || 0}</span>
                             <span className="text-[10px] text-gray-500 uppercase">Completed</span>
                         </div>
                         <div className="flex flex-col items-center">
-                            <span className="font-bold text-yellow-600">{stats.inProgress}</span>
+                            <span className="font-bold text-yellow-600">{globalStats.in_progress?.toLocaleString() || 0}</span>
                             <span className="text-[10px] text-gray-500 uppercase">Ongoing</span>
                         </div>
                     </div>
@@ -207,6 +260,7 @@ const AdminDashboard = () => {
             </header>
 
             <main className="flex-1 overflow-hidden flex flex-col">
+                {/* Controls Bar */}
                 <div className="bg-white p-4 border-b flex flex-col md:flex-row gap-4 justify-between items-center shadow-sm z-20">
                     <div className="flex gap-4 w-full md:w-auto">
                         <div className="bg-gray-100 p-1 rounded-lg flex">
@@ -228,7 +282,7 @@ const AdminDashboard = () => {
                             <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
                             <input
                                 type="text"
-                                placeholder="Search works..."
+                                placeholder="Search Name or Work Code..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
@@ -237,6 +291,43 @@ const AdminDashboard = () => {
                     </div>
 
                     <div className="flex gap-3 w-full md:w-auto items-center overflow-x-auto pb-2 md:pb-0">
+                        {/* Dynamic Filters */}
+                        <select
+                            value={filters.block}
+                            onChange={(e) => setFilters(p => ({ ...p, block: e.target.value }))}
+                            className="text-sm border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[150px]"
+                        >
+                            <option value="">All Blocks</option>
+                            {filterOptions.blocks.map(b => <option key={b} value={b}>{b}</option>)}
+                        </select>
+
+                        <select
+                            value={filters.department}
+                            onChange={(e) => setFilters(p => ({ ...p, department: e.target.value }))}
+                            className="text-sm border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[150px]"
+                        >
+                            <option value="">All Depts</option>
+                            {filterOptions.departments.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+
+                        <select
+                            value={filters.agency}
+                            onChange={(e) => setFilters(p => ({ ...p, agency: e.target.value }))}
+                            className="text-sm border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[150px]"
+                        >
+                            <option value="">All Agencies</option>
+                            {filterOptions.agencies.map(a => <option key={a} value={a}>{a}</option>)}
+                        </select>
+
+                        <select
+                            value={filters.status}
+                            onChange={(e) => setFilters(p => ({ ...p, status: e.target.value }))}
+                            className="text-sm border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                            <option value="">All Status</option>
+                            {filterOptions.statuses.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+
                         {/* Column Toggle */}
                         <div className="relative">
                             <button
@@ -263,51 +354,14 @@ const AdminDashboard = () => {
                             )}
                         </div>
 
-                        <select
-                            value={filters.panchayat}
-                            onChange={(e) => setFilters({ ...filters, panchayat: e.target.value })}
-                            className="text-sm border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[150px]"
-                        >
-                            <option value="">All GPs</option>
-                            {allPanchayats.map(p => <option key={p} value={p}>{p}</option>)}
-                        </select>
-
-                        <select
-                            value={filters.department}
-                            onChange={(e) => setFilters({ ...filters, department: e.target.value })}
-                            className="text-sm border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[150px]"
-                        >
-                            <option value="">All Depts</option>
-                            {allDepts.map(d => <option key={d} value={d}>{d}</option>)}
-                        </select>
-
-                        <select
-                            value={filters.agency}
-                            onChange={(e) => setFilters({ ...filters, agency: e.target.value })}
-                            className="text-sm border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[150px]"
-                        >
-                            <option value="">All Agencies</option>
-                            {allAgencies.map(a => <option key={a} value={a}>{a}</option>)}
-                        </select>
-
-                        <select
-                            value={filters.status}
-                            onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                            className="text-sm border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="">All Status</option>
-                            {allStatus.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-
+                        {/* Upload */}
                         <div className="relative group">
                             <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition whitespace-nowrap">
                                 <Upload size={16} /> <span className="hidden sm:inline">Upload CSV</span>
                                 <input
                                     type="file"
                                     accept=".csv,.xlsx"
-                                    onChange={(e) => {
-                                        setFile(e.target.files[0]);
-                                    }}
+                                    onChange={(e) => setFile(e.target.files[0])}
                                     className="hidden"
                                 />
                             </label>
@@ -322,17 +376,28 @@ const AdminDashboard = () => {
                 </div>
 
                 <div className="flex-1 relative bg-gray-50 overflow-hidden">
+                    {loading && (
+                        <div className="absolute inset-0 bg-white/50 z-20 flex items-center justify-center">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                        </div>
+                    )}
+
                     {viewMode === 'map' ? (
                         <div className="absolute inset-4 rounded-xl overflow-hidden border shadow-sm bg-white">
-                            <MapComponent works={sortedAndFilteredWorks} />
+                            <MapComponent works={works} />
+                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/90 px-4 py-2 rounded-full shadow-lg text-xs font-medium">
+                                Showing {works.length} works (Page {pagination.page})
+                            </div>
                         </div>
                     ) : (
-                        <div className="h-full overflow-auto p-4 flex flex-col gap-4">
-                            <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-                                <div className="overflow-x-auto">
+                        <div className="h-full overflow-hidden flex flex-col">
+                            {/* Table */}
+                            <div className="flex-1 overflow-auto p-4">
+                                <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
                                     <table className="w-full text-left border-collapse text-sm">
                                         <thead className="bg-gray-50 border-b sticky top-0 z-10 w-full">
                                             <tr>
+                                                <th className="p-4 font-semibold text-gray-600">#</th>
                                                 {[
                                                     { key: 'work_name', label: 'Work Details' },
                                                     { key: 'department', label: 'Department' },
@@ -348,17 +413,8 @@ const AdminDashboard = () => {
                                                     { key: 'remark', label: 'Remarks' },
                                                 ].map((col) => (
                                                     visibleColumns[col.key] && (
-                                                        <th
-                                                            key={col.key}
-                                                            className="p-4 font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 select-none whitespace-nowrap"
-                                                            onClick={() => handleSort(col.key)}
-                                                        >
-                                                            <div className="flex items-center gap-1">
-                                                                {col.label}
-                                                                {sortConfig.key === col.key && (
-                                                                    <ArrowUpDown size={12} className={sortConfig.direction === 'asc' ? 'rotate-180' : ''} />
-                                                                )}
-                                                            </div>
+                                                        <th key={col.key} className="p-4 font-semibold text-gray-600 whitespace-nowrap">
+                                                            {col.label}
                                                         </th>
                                                     )
                                                 ))}
@@ -366,8 +422,11 @@ const AdminDashboard = () => {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y">
-                                            {sortedAndFilteredWorks.map((work) => (
+                                            {works.map((work, idx) => (
                                                 <tr key={work.id} className="hover:bg-blue-50/30 transition-colors group">
+                                                    <td className="p-4 text-xs text-gray-400">
+                                                        {(pagination.page - 1) * pagination.limit + idx + 1}
+                                                    </td>
                                                     {visibleColumns.work_name && (
                                                         <td className="p-4 cursor-pointer" onClick={() => handleViewDetails(work)}>
                                                             <div className="font-medium text-blue-700 hover:underline line-clamp-2 w-64">{work.work_name}</div>
@@ -429,9 +488,9 @@ const AdminDashboard = () => {
                                                     </td>
                                                 </tr>
                                             ))}
-                                            {sortedAndFilteredWorks.length === 0 && (
+                                            {works.length === 0 && !loading && (
                                                 <tr>
-                                                    <td colSpan="6" className="p-8 text-center text-gray-500">
+                                                    <td colSpan="10" className="p-8 text-center text-gray-500">
                                                         No works found matching your criteria.
                                                     </td>
                                                 </tr>
@@ -441,17 +500,13 @@ const AdminDashboard = () => {
                                 </div>
                             </div>
 
-                            {hasMore && (
-                                <div className="text-center pb-4">
-                                    <button
-                                        onClick={() => fetchWorks(false)}
-                                        disabled={loading}
-                                        className="bg-blue-100 text-blue-800 px-6 py-2 rounded-full text-sm font-semibold hover:bg-blue-200 disabled:opacity-50 transition"
-                                    >
-                                        {loading ? 'Loading...' : 'Load More Works'}
-                                    </button>
+                            {/* Pagination */}
+                            <div className="bg-white border-t p-2">
+                                {renderPagination()}
+                                <div className="text-center text-xs text-gray-400 mt-1">
+                                    Displaying {works.length} of {pagination.total} works
                                 </div>
-                            )}
+                            </div>
                         </div>
                     )}
                 </div>
