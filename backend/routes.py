@@ -76,6 +76,9 @@ async def upload_works(
         to_insert = []
         to_update = []
         
+        # Track codes seen in this batch to handle duplicates within the file
+        seen_in_batch = set()
+
         # Process DataFrame
         for _, row in df.iterrows():
              # Map "Work Id Number" or "work_code"
@@ -96,6 +99,11 @@ async def upload_works(
 
             if work_code.endswith('.0'):
                 work_code = work_code[:-2]
+
+            # Prevent duplicates within the same file (violates Unique constraint)
+            if work_code in seen_in_batch:
+                continue
+            seen_in_batch.add(work_code)
 
             # Mapping Data
             data = {
@@ -129,13 +137,6 @@ async def upload_works(
             }
 
             if work_code in all_existing_codes:
-                # Update logic is tricky with bulk_update unless we have Primary Key ID.
-                # models.Work.work_code is likely unique but not PK? ID is PK.
-                # Bulk update by non-PK is hard in ORM.
-                # Fallback: For updates, we might need individual queries OR fetch ID map.
-                # Let's fetch {work_code: id} map.
-                pass 
-                # For now, put in to_update list, will handle below
                 to_update.append(data)
             else:
                 to_insert.append(data)
