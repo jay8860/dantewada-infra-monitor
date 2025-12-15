@@ -216,6 +216,7 @@ async def create_inspection(
     for photo in photos:
         file_extension = photo.filename.split(".")[-1]
         filename = f"insp_{new_inspection.id}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{photo.filename}"
+        os.makedirs("uploads", exist_ok=True)
         file_path = f"uploads/{filename}"
         
         with open(file_path, "wb") as buffer:

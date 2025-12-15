@@ -87,12 +87,12 @@ const OfficerDashboard = () => {
         formData.append('status', status);
         formData.append('latitude', location.latitude);
         formData.append('longitude', location.longitude);
-        formData.append('photo', photo);
+        formData.append('photos', photo);
         formData.append('work_id', selectedWork.id);
 
         try {
             // Try Online First
-            await api.post(`/works/${selectedWork.id}/update`, formData, {
+            await api.post(`/works/${selectedWork.id}/inspections`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
             alert("Work updated successfully!");
@@ -132,11 +132,11 @@ const OfficerDashboard = () => {
             formData.append('status', item.status);
             formData.append('latitude', item.latitude);
             formData.append('longitude', item.longitude);
-            formData.append('photo', item.photoBlob, `offline_${item.workId}.jpg`);
+            formData.append('photos', item.photoBlob, `offline_${item.workId}.jpg`);
             formData.append('work_id', item.workId);
 
             try {
-                await api.post(`/works/${item.workId}/update`, formData, {
+                await api.post(`/works/${item.workId}/inspections`, formData, {
                     headers: { 'Content-Type': 'multipart/form-data' }
                 });
                 await deletePendingUpdate(item.id);
