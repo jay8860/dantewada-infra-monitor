@@ -183,66 +183,93 @@ async def get_work_stats(db: Session = Depends(get_db)):
         "completed": stats.get('Completed', 0),
         "in_progress": stats.get('In Progress', 0),
         "not_started": stats.get('Not Started', 0),
-        "halted": stats.get('Halted', 0) # Adjust if you have this status
+        "halted": stats.get('Halted', 0)
     }
 
 @router.get("/works/filters")
 async def get_work_filters(db: Session = Depends(get_db)):
-    # distinct() allows getting unique values
-    blocks = [r[0] for r in db.query(models.Work.block).distinct().filter(models.Work.block != None).order_by(models.Work.block).all()]
-    departments = [r[0] for r in db.query(models.Work.department).distinct().filter(models.Work.department != None).order_by(models.Work.department).all()]
-    agencies = [r[0] for r in db.query(models.Work.agency_name).distinct().filter(models.Work.agency_name != None).order_by(models.Work.agency_name).all()]
-    statuses = [r[0] for r in db.query(models.Work.current_status).distinct().filter(models.Work.current_status != None).order_by(models.Work.current_status).all()]
-    years = [r[0] for r in db.query(models.Work.financial_year).distinct().filter(models.Work.financial_year != None).order_by(models.Work.financial_year).all()]
+    # Fetch all raw values and normalize in Python to ensure case-insensitivity
+    def get_clean_values(column):
+        raw = db.query(column).distinct().filter(column != None).all()
+        # Title case and deduplicate
+        return sorted(list(set(str(r[0]).strip().title() for r in raw if r[0])))
 
     return {
-        "blocks": blocks,
-        "departments": departments,
-        "agencies": agencies,
-        "statuses": statuses,
-        "years": years
+        "blocks": get_clean_values(models.Work.block),
+        "panchayats": get_clean_values(models.Work.panchayat),
+        "departments": get_clean_values(models.Work.department),
+        "agencies": get_clean_values(models.Work.agency_name),
+        "statuses": get_clean_values(models.Work.current_status),
+        "years": get_clean_values(models.Work.financial_year)
     }
 
-
-
-@router.get("/works")
-async def get_works(
-    response: Response,
+@router.get("/works/locations")
+async def get_work_locations(
     department: Optional[str] = None, 
     block: Optional[str] = None,
+    panchayat: Optional[str] = None,
     status: Optional[str] = None,
     agency: Optional[str] = None,
     year: Optional[str] = None,
     search: Optional[str] = None,
-    skip: int = 0,
-    limit: int = 100,
     db: Session = Depends(get_db)
 ):
-    query = db.query(models.Work)
+    query = db.query(
+        models.Work.id, 
+        models.Work.latitude, 
+        models.Work.longitude, 
+        models.Work.current_status,
+        models.Work.work_name,
+        models.Work.work_code,
+        models.Work.department,
+        models.Work.block,
+        models.Work.panchayat
+    )
+    
+    # Apply Filters (Case Insensitive for string fields if needed, but usually exact match from dropdowns is fine if dropdowns are normalized? 
+    # Actually, if dropdown says "Katekalyan" but DB has "KATEKALYAN", exact match fails.
+    # We should use ILIKE for text filters to be safe.)
+    
     if department:
-        query = query.filter(models.Work.department == department)
-        # Handle 'Others' or specific cleanup if needed
+        query = query.filter(models.Work.department.ilike(department))
     if block:
-        query = query.filter(models.Work.block == block)
+        query = query.filter(models.Work.block.ilike(block))
+    if panchayat:
+        query = query.filter(models.Work.panchayat.ilike(panchayat))
     if status:
-        query = query.filter(models.Work.current_status == status)
+        query = query.filter(models.Work.current_status.ilike(status))
     if agency:
-        query = query.filter(models.Work.agency_name == agency)
+        query = query.filter(models.Work.agency_name.ilike(agency))
     if year:
         query = query.filter(models.Work.financial_year == year)
     if search:
         search_term = f"%{search}%"
-        # Search in work_name or work_code
         from sqlalchemy import or_
         query = query.filter(or_(
             models.Work.work_name.ilike(search_term),
             models.Work.work_code.ilike(search_term)
         ))
         
-    total_count = query.count()
-    response.headers["X-Total-Count"] = str(total_count)
+    # Only return works with coordinates
+    query = query.filter(models.Work.latitude != None, models.Work.longitude != None)
     
-    return query.offset(skip).limit(limit).all()
+    results = query.all()
+    
+    # Convert to lightweight dict list
+    return [
+        {
+            "id": r.id,
+            "lat": r.latitude,
+            "lng": r.longitude,
+            "status": r.current_status,
+            "title": r.work_name,
+            "code": r.work_code,
+            "dept": r.department,
+            "block": r.block,
+            "gp": r.panchayat
+        }
+        for r in results
+    ]
 
 
 @router.get("/works/{work_id}")

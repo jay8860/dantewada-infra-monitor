@@ -22,20 +22,23 @@ const AdminDashboard = () => {
 
     // --- State: Data ---
     const [works, setWorks] = useState([]);
+    const [mapWorks, setMapWorks] = useState([]); // Decoupled map data (all points)
     const [globalStats, setGlobalStats] = useState({ total: 0, completed: 0, in_progress: 0, not_started: 0 });
-    const [filterOptions, setFilterOptions] = useState({ blocks: [], departments: [], agencies: [], statuses: [], years: [] });
+    const [filterOptions, setFilterOptions] = useState({ blocks: [], panchayats: [], departments: [], agencies: [], statuses: [], years: [] });
 
     // --- State: UI & Controls ---
     const [viewMode, setViewMode] = useState('table'); // 'table' or 'map'
     const [selectedWork, setSelectedWork] = useState(null);
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [mapLoading, setMapLoading] = useState(false);
     const [file, setFile] = useState(null);
     const [showColumnMenu, setShowColumnMenu] = useState(false);
 
-    // --- State: Filters & Pagination ---
+    // --- State: Filters, Sort & Pagination ---
     const [filters, setFilters] = useState({
         block: '',
+        panchayat: '',
         department: '',
         status: '',
         agency: '',
@@ -44,9 +47,11 @@ const AdminDashboard = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const debouncedSearch = useDebounce(searchTerm, 500);
 
+    const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+
     const [pagination, setPagination] = useState({
         page: 1,
-        limit: 100, // User requested ~100 rows per page
+        limit: 100,
         total: 0,
         totalPages: 0
     });
@@ -84,7 +89,7 @@ const AdminDashboard = () => {
         }
     };
 
-    // --- Fetch Works (Paginated & Filtered) ---
+    // --- Fetch TABLE Works (Paginated) ---
     const fetchWorks = useCallback(async () => {
         setLoading(true);
         try {
@@ -94,8 +99,10 @@ const AdminDashboard = () => {
                 ...filters,
             };
 
-            if (debouncedSearch) {
-                params.search = debouncedSearch;
+            if (debouncedSearch) params.search = debouncedSearch;
+            if (sortConfig.key) {
+                params.sort_by = sortConfig.key;
+                params.sort_order = sortConfig.direction;
             }
 
             // Remove empty filters
@@ -104,8 +111,6 @@ const AdminDashboard = () => {
             });
 
             const response = await api.get('/works', { params });
-
-            // Read Total Count from Headers
             const totalCount = parseInt(response.headers['x-total-count'] || '0', 10);
 
             setWorks(response.data);
@@ -120,12 +125,40 @@ const AdminDashboard = () => {
         } finally {
             setLoading(false);
         }
-    }, [pagination.page, pagination.limit, filters, debouncedSearch]);
+    }, [pagination.page, pagination.limit, filters, debouncedSearch, sortConfig]);
 
-    // Trigger fetch on filter/page/search change
+    // --- Fetch MAP Works (All Points) ---
+    const fetchMapWorks = useCallback(async () => {
+        // Only fetch if in map mode
+        if (viewMode !== 'map') return;
+
+        setMapLoading(true);
+        try {
+            const params = { ...filters };
+            if (debouncedSearch) params.search = debouncedSearch;
+
+            // Remove empty filters
+            Object.keys(params).forEach(key => {
+                if (params[key] === '' || params[key] === null) delete params[key];
+            });
+
+            const response = await api.get('/works/locations', { params });
+            setMapWorks(response.data);
+        } catch (error) {
+            console.error("Error fetching map locations", error);
+        } finally {
+            setMapLoading(false);
+        }
+    }, [viewMode, filters, debouncedSearch]);
+
+    // Effects
     useEffect(() => {
         fetchWorks();
-    }, [fetchWorks]);
+    }, [fetchWorks]); // Trigger table fetch
+
+    useEffect(() => {
+        fetchMapWorks();
+    }, [fetchMapWorks]); // Trigger map fetch
 
     // Reset Page on Filter Change
     useEffect(() => {
@@ -133,8 +166,32 @@ const AdminDashboard = () => {
     }, [filters, debouncedSearch]);
 
     // --- Handlers ---
-    const handleViewDetails = (work) => {
-        setSelectedWork(work);
+    const handleSort = (key) => {
+        setSortConfig(current => ({
+            key,
+            direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+        }));
+    };
+
+    const handleViewDetails = async (workOrId) => {
+        // If it's a lightweight map object, we might need to fetch details.
+        // But WorkDetailDrawer usually expects a full object or ID.
+        // Our API supports get /works/{id}.
+        // If passed object has 'id', use it.
+        let workData = workOrId;
+
+        // If clicked from map, we might only have partial data.
+        // Ideally fetch full data.
+        if (workOrId.id && !workOrId.sanctioned_amount) {
+            try {
+                const res = await api.get(`/works/${workOrId.id}`);
+                workData = res.data;
+            } catch (e) {
+                console.error("Failed to fetch details", e);
+            }
+        }
+
+        setSelectedWork(workData);
         setIsDrawerOpen(true);
     };
 
@@ -160,7 +217,7 @@ const AdminDashboard = () => {
             alert('File uploaded successfully');
             setFile(null);
             fetchWorks();
-            fetchGlobalData(); // Update stats too
+            fetchGlobalData();
         } catch (error) {
             console.error("Upload failed", error);
             alert(`Upload Failed: ${error.message}`);
@@ -176,7 +233,6 @@ const AdminDashboard = () => {
         if (pagination.totalPages <= 1) return null;
 
         let pages = [];
-        // Show limited pages: 1 .. current-1, current, current+1 .. last
         const { page, totalPages } = pagination;
 
         if (totalPages <= 7) {
@@ -302,6 +358,15 @@ const AdminDashboard = () => {
                         </select>
 
                         <select
+                            value={filters.panchayat}
+                            onChange={(e) => setFilters(p => ({ ...p, panchayat: e.target.value }))}
+                            className="text-sm border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[150px]"
+                        >
+                            <option value="">All GPs</option>
+                            {filterOptions.panchayats?.map(g => <option key={g} value={g}>{g}</option>)}
+                        </select>
+
+                        <select
                             value={filters.department}
                             onChange={(e) => setFilters(p => ({ ...p, department: e.target.value }))}
                             className="text-sm border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[150px]"
@@ -365,18 +430,12 @@ const AdminDashboard = () => {
                                     className="hidden"
                                 />
                             </label>
-                            {file && (
-                                <div className="absolute top-full right-0 mt-2 bg-white shadow-lg border p-3 rounded w-48 z-50">
-                                    <p className="text-xs truncate mb-2">{file.name}</p>
-                                    <button onClick={handleFileUpload} className="w-full bg-green-600 text-white text-xs py-1 rounded">Confirm Upload</button>
-                                </div>
-                            )}
                         </div>
                     </div>
                 </div>
 
                 <div className="flex-1 relative bg-gray-50 overflow-hidden">
-                    {loading && (
+                    {(loading || mapLoading) && (
                         <div className="absolute inset-0 bg-white/50 z-20 flex items-center justify-center">
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
                         </div>
@@ -384,9 +443,9 @@ const AdminDashboard = () => {
 
                     {viewMode === 'map' ? (
                         <div className="absolute inset-4 rounded-xl overflow-hidden border shadow-sm bg-white">
-                            <MapComponent works={works} />
+                            <MapComponent works={mapWorks} onWorkClick={handleViewDetails} />
                             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/90 px-4 py-2 rounded-full shadow-lg text-xs font-medium">
-                                Showing {works.length} works (Page {pagination.page})
+                                Showing {mapWorks.length} works (Full Dataset)
                             </div>
                         </div>
                     ) : (
@@ -413,8 +472,17 @@ const AdminDashboard = () => {
                                                     { key: 'remark', label: 'Remarks' },
                                                 ].map((col) => (
                                                     visibleColumns[col.key] && (
-                                                        <th key={col.key} className="p-4 font-semibold text-gray-600 whitespace-nowrap">
-                                                            {col.label}
+                                                        <th
+                                                            key={col.key}
+                                                            onClick={() => handleSort(col.key)}
+                                                            className="p-4 font-semibold text-gray-600 whitespace-nowrap cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                                                        >
+                                                            <div className="flex items-center gap-1">
+                                                                {col.label}
+                                                                {sortConfig.key === col.key && (
+                                                                    <ArrowUpDown size={12} className={sortConfig.direction === 'asc' ? 'text-blue-500' : 'text-blue-500 rotate-180'} />
+                                                                )}
+                                                            </div>
                                                         </th>
                                                     )
                                                 ))}
