@@ -440,7 +440,6 @@ async def get_work_timeline(
             "remarks": insp.remarks,
             "photos": [{"url": p.image_path} for p in insp.photos]
         })
-        })
     return timeline
 
 @router.post("/works/{work_id}/assign")
