@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Response
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from database import get_db
@@ -203,17 +203,7 @@ async def get_work_filters(db: Session = Depends(get_db)):
         "years": years
     }
 
-    # Return X-Total-Count header for pagination
-    from fastapi import Response
-    
-    total_count = query.count()
-    results = query.offset(skip).limit(limit).all()
-    
-    # We can use Response parameter to set headers, but since we return list directly, 
-    # we need to ensure FastAPI processes it.
-    # Cleaner way: Use Response parameter in signature.
-    
-    return results
+
 
 @router.get("/works")
 async def get_works(
