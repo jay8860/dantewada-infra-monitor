@@ -271,6 +271,72 @@ async def get_work_locations(
         for r in results
     ]
 
+@router.get("/works")
+async def get_works(
+    response: Response,
+    department: Optional[str] = None, 
+    block: Optional[str] = None,
+    panchayat: Optional[str] = None,
+    status: Optional[str] = None,
+    agency: Optional[str] = None,
+    year: Optional[str] = None,
+    search: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "asc",
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    query = db.query(models.Work)
+    if department:
+        query = query.filter(models.Work.department.ilike(department))
+    if block:
+        query = query.filter(models.Work.block.ilike(block))
+    if panchayat:
+        query = query.filter(models.Work.panchayat.ilike(panchayat))
+    if status:
+        query = query.filter(models.Work.current_status.ilike(status))
+    if agency:
+        query = query.filter(models.Work.agency_name.ilike(agency))
+    if year:
+        query = query.filter(models.Work.financial_year == year)
+    if search:
+        search_term = f"%{search}%"
+        # Search in work_name or work_code
+        from sqlalchemy import or_
+        query = query.filter(or_(
+            models.Work.work_name.ilike(search_term),
+            models.Work.work_code.ilike(search_term)
+        ))
+        
+    total_count = query.count()
+    response.headers["X-Total-Count"] = str(total_count)
+    
+    # Sorting
+    if sort_by:
+        valid_columns = {
+            'work_name': models.Work.work_name,
+            'department': models.Work.department,
+            'block': models.Work.block,
+            'sanctioned_amount': models.Work.sanctioned_amount,
+            'sanctioned_date': models.Work.sanctioned_date,
+            'current_status': models.Work.current_status,
+            'agency_name': models.Work.agency_name,
+            'financial_year': models.Work.financial_year,
+            'total_released_amount': models.Work.total_released_amount,
+            'amount_pending': models.Work.amount_pending,
+            'probable_completion_date': models.Work.probable_completion_date
+        }
+        
+        col = valid_columns.get(sort_by)
+        if col:
+            if sort_order == 'desc':
+                query = query.order_by(col.desc())
+            else:
+                query = query.order_by(col.asc())
+    
+    return query.offset(skip).limit(limit).all()
+
 
 @router.get("/works/{work_id}")
 async def get_work(work_id: int, db: Session = Depends(get_db)):
