@@ -195,54 +195,59 @@ async def create_inspection(
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db)
 ):
-    work = db.query(models.Work).filter(models.Work.id == work_id).first()
-    if not work:
-        raise HTTPException(status_code=404, detail="Work not found")
-        
-    # Create Inspection Record
-    new_inspection = models.Inspection(
-        work_id=work_id,
-        inspector_name=current_user.username,
-        status_at_time=status,
-        remarks=remarks,
-        latitude=latitude,
-        longitude=longitude,
-        inspection_date=datetime.utcnow()
-    )
-    db.add(new_inspection)
-    db.flush() # Get ID
-    
-    # Save Photos
-    for photo in photos:
-        file_extension = photo.filename.split(".")[-1]
-        filename = f"insp_{new_inspection.id}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{photo.filename}"
-        os.makedirs("uploads", exist_ok=True)
-        file_path = f"uploads/{filename}"
-        
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(photo.file, buffer)
+    try:
+        work = db.query(models.Work).filter(models.Work.id == work_id).first()
+        if not work:
+            raise HTTPException(status_code=404, detail="Work not found")
             
-        new_photo = models.Photo(
+        # Create Inspection Record
+        new_inspection = models.Inspection(
             work_id=work_id,
-            inspection_id=new_inspection.id,
-            image_path=file_path,
-            gps_lat=latitude,
-            gps_long=longitude,
-            uploaded_by=current_user.username
+            inspector_name=current_user.username,
+            status_at_time=status,
+            remarks=remarks,
+            latitude=latitude,
+            longitude=longitude,
+            inspection_date=datetime.utcnow()
         )
-        db.add(new_photo)
+        db.add(new_inspection)
+        db.flush() # Get ID
         
-    # Update Work's current status and lat/long to reflect latest inspection
-    work.current_status = status
-    work.last_updated = datetime.utcnow()
-    work.latitude = latitude
-    work.longitude = longitude
-    # Also update verified status? User said "Verified on ground?"
-    work.verified_on_ground = "Yes"
-    work.inspection_date = datetime.utcnow()
-    
-    db.commit()
-    return {"message": "Inspection submitted successfully"}
+        # Save Photos
+        for photo in photos:
+            file_extension = photo.filename.split(".")[-1]
+            filename = f"insp_{new_inspection.id}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{photo.filename}"
+            os.makedirs("uploads", exist_ok=True)
+            file_path = f"uploads/{filename}"
+            
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(photo.file, buffer)
+                
+            new_photo = models.Photo(
+                work_id=work_id,
+                inspection_id=new_inspection.id,
+                image_path=file_path,
+                gps_lat=latitude,
+                gps_long=longitude,
+                uploaded_by=current_user.username
+            )
+            db.add(new_photo)
+            
+        # Update Work's current status and lat/long to reflect latest inspection
+        work.current_status = status
+        work.last_updated = datetime.utcnow()
+        work.latitude = latitude
+        work.longitude = longitude
+        # Also update verified status? User said "Verified on ground?"
+        work.verified_on_ground = "Yes"
+        work.inspection_date = datetime.utcnow()
+        
+        db.commit()
+        return {"message": "Inspection submitted successfully"}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Inspection failed: {str(e)}")
 
 @router.get("/works/{work_id}/timeline")
 async def get_work_timeline(
