@@ -72,7 +72,6 @@ const AdminDashboard = () => {
         total_released_amount: false,
         amount_pending: false,
         probable_completion_date: false,
-        probable_completion_date: false,
         remark: false,
         assignment: true // New default
     });
@@ -488,8 +487,9 @@ const AdminDashboard = () => {
                     ) : (
                         <div className="h-full overflow-hidden flex flex-col">
                             {/* Table */}
+                            {/* Table Card */}
                             <div className="flex-1 overflow-auto p-4">
-                                <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                                <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
                                     <table className="w-full text-left border-collapse text-sm">
                                         <thead className="bg-gray-50 border-b sticky top-0 z-10 w-full">
                                             <tr>

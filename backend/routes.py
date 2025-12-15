@@ -228,8 +228,10 @@ async def get_work_locations(
         models.Work.work_code,
         models.Work.department,
         models.Work.block,
+        models.Work.block,
         models.Work.panchayat,
-        models.Work.assigned_officer_id
+        models.Work.assigned_officer_id,
+        models.Work.remark # Added for coloring logic
     )
     
     # Apply Filters (Case Insensitive for string fields if needed, but usually exact match from dropdowns is fine if dropdowns are normalized? 
@@ -267,7 +269,8 @@ async def get_work_locations(
             "id": r.id,
             "lat": r.latitude,
             "lng": r.longitude,
-            "status": r.current_status,
+            "current_status": r.current_status, # Fixed key for frontend
+            "remark": r.remark, # Added for color logic
             "title": r.work_name,
             "code": r.work_code,
             "dept": r.department,
