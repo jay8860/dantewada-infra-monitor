@@ -282,7 +282,7 @@ const AdminDashboard = () => {
             fetchWorks(); // Refresh list
         } catch (e) {
             console.error("Assignment failed", e);
-            alert(`Failed to assign work: ${e.response?.data?.detail || e.message}`);
+            alert(`Failed to assign work: ${JSON.stringify(e.response?.data?.detail || e.message)}`);
         }
     };
 

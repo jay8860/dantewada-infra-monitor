@@ -50,8 +50,14 @@ def process_dataframe(df: pd.DataFrame, db: Session):
     
     # 1. Fetch existing codes and coordinates to preserve them if missing in update
     existing_works = db.query(models.Work.work_code, models.Work.latitude, models.Work.longitude, models.Work.panchayat, models.Work.block).all()
-    all_existing_codes = {w.work_code for w in existing_works}
-    existing_coords = {w.work_code: (w.latitude, w.longitude) for w in existing_works}
+    # Robust Clean: Strip .0 from DB codes too just in case
+    all_existing_codes = set()
+    existing_coords = {}
+    for w in existing_works:
+        wc = str(w.work_code)
+        if wc.endswith('.0'): wc = wc[:-2]
+        all_existing_codes.add(wc)
+        existing_coords[wc] = (w.latitude, w.longitude)
     
     # Build GP Cache from DB to avoid API calls
     # Map "GP_BLOCK" -> (lat, lng)
@@ -150,10 +156,14 @@ def process_dataframe(df: pd.DataFrame, db: Session):
                'remark': row.get('Remark'),
                'csv_photo_info': str(row.get('Photo with Date') or ''), 
                
-               # Coordinates
-               'latitude': final_lat,
-               'longitude': final_lng
+               'remark': row.get('Remark'),
+               'csv_photo_info': str(row.get('Photo with Date') or ''), 
             }
+            
+            # Non-Destructive Update: Only include coords if valid
+            if final_lat is not None and final_lng is not None:
+                data['latitude'] = final_lat
+                data['longitude'] = final_lng
 
             if work_code in all_existing_codes:
                 to_update.append(data)
