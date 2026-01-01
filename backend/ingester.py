@@ -156,9 +156,14 @@ def process_dataframe(df: pd.DataFrame, db: Session):
                  final_lat = existing_coords[work_code][0]
                  final_lng = existing_coords[work_code][1]
 
-            # 4. Naming & Type Logic (Apply to ALL rows, even if coords exist)
-            gp_name = str(row.get('Panchayat') or row.get('Gram Panchayat') or row.get('panchayat') or '').strip()
+            # 4. Naming & Type Logic
+            # CLEAN PARENCHAYAT NAME: Remove ", BlockName" suffix if present (e.g. "JAWANGA, GEEDAM" -> "JAWANGA")
+            raw_gp = str(row.get('Panchayat') or row.get('Gram Panchayat') or row.get('panchayat') or '').strip()
+            gp_name = raw_gp.split(',')[0].strip()
+            
             blk_name = str(row.get('Block') or row.get('Block Name') or row.get('block') or '').strip()
+            # Clean Block Name too if needed, though usually just one word
+            
             level_raw = row.get('District/Block level')
             level_type = str(level_raw).strip() if pd.notna(level_raw) else ''
 
