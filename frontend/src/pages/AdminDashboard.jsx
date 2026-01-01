@@ -199,14 +199,16 @@ const AdminDashboard = () => {
         let workData = workOrId;
 
         // If clicked from map, we might only have partial data.
-        // Map objects have 'title' but missing 'work_name', 'agency_name', etc.
-        // We check for a field that should exist in the full object but not in the map object.
-        if (workOrId.id && (!workOrId.work_name || !workOrId.agency_name)) {
+        // Map objects have 'title' property while full objects have 'work_name'.
+        // Also check if agency_name is missing (common missing field in map).
+        if (workOrId.id && (workOrId.title || !workOrId.work_name || !workOrId.agency_name)) {
             try {
+                // FORCE Fetch full details
                 const res = await api.get(`/works/${workOrId.id}`);
                 workData = res.data;
             } catch (e) {
                 console.error("Failed to fetch details", e);
+                // Fallback: alert user or show what we have
             }
         }
 
@@ -271,10 +273,17 @@ const AdminDashboard = () => {
         if (!assignmentModal.workId || !assignmentModal.officerId) return;
 
         try {
+            const officerIdInt = parseInt(assignmentModal.officerId);
+            if (isNaN(officerIdInt)) {
+                alert("Invalid Officer ID selected.");
+                return;
+            }
+
             const payload = {
-                officer_id: parseInt(assignmentModal.officerId),
-                deadline_days: assignmentModal.days ? parseInt(assignmentModal.days) : 7 // Default 7 if empty
+                officer_id: officerIdInt,
+                deadline_days: assignmentModal.days ? parseInt(assignmentModal.days) : 7
             };
+            console.log("Submitting assignment payload:", payload);
 
             await api.post(`/works/${assignmentModal.workId}/assign`, payload);
             alert('Assignment successful!');
