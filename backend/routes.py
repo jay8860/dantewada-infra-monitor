@@ -362,41 +362,48 @@ async def export_works(
     search: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    query = build_works_query(db, department, block, panchayat, status, agency, year, search)
-    results = query.all()
-    
-    # Convert manually to avoid pandas overhead? No, pandas is safer for Excel
-    data = []
-    for r in results:
-        data.append({
-            "Work Code": r.work_code,
-            "Work Name": r.work_name,
-            "Department": r.department,
-            "Type": r.financial_year, # Column 2 is Financial Year mostly
-            "Location": r.panchayat, # Strict
-            "Block": r.block,
-            "Sanctioned Amount": r.sanctioned_amount,
-            "Sanctioned Date": r.sanctioned_date,
-            "Status": r.current_status,
-            "Agency": r.agency_name,
-            "Released": r.total_released_amount,
-            "Pending": r.amount_pending,
-            "Est End Date": r.probable_completion_date,
-            "Remark": r.remark
-        })
-    
-    df = pd.DataFrame(data)
-    
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Works')
-    output.seek(0)
-    
-    return StreamingResponse(
-        output, 
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
-        headers={"Content-Disposition": f"attachment; filename=works_export_{datetime.now().strftime('%Y%m%d')}.xlsx"}
-    )
+    try:
+        query = build_works_query(db, department, block, panchayat, status, agency, year, search)
+        results = query.all()
+        print(f"DEBUG: Export found {len(results)} rows")
+        
+        # Convert manually to avoid pandas overhead? No, pandas is safer for Excel
+        data = []
+        for r in results:
+            data.append({
+                "Work Code": r.work_code,
+                "Work Name": r.work_name,
+                "Department": r.department,
+                "Type": r.financial_year, # Column 2 is Financial Year mostly
+                "Location": r.panchayat, # Strict
+                "Block": r.block,
+                "Sanctioned Amount": r.sanctioned_amount,
+                "Sanctioned Date": r.sanctioned_date,
+                "Status": r.current_status,
+                "Agency": r.agency_name,
+                "Released": r.total_released_amount,
+                "Pending": r.amount_pending,
+                "Est End Date": r.probable_completion_date,
+                "Remark": r.remark,
+                "Assigned To": r.assigned_officer.username if r.assigned_officer else "Unassigned"
+            })
+        
+        df = pd.DataFrame(data)
+        
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Works')
+        output.seek(0)
+        
+        return StreamingResponse(
+            output, 
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+            headers={"Content-Disposition": f"attachment; filename=works_export_{datetime.now().strftime('%Y%m%d')}.xlsx"}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Export Failed: {str(e)}")
 
 
 @router.get("/works/{work_id}")
