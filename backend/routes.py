@@ -395,8 +395,8 @@ async def export_works(
             df.to_excel(writer, index=False, sheet_name='Works')
         output.seek(0)
         
-        return StreamingResponse(
-            output, 
+        return Response(
+            content=output.getvalue(), 
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
             headers={"Content-Disposition": f"attachment; filename=works_export_{datetime.now().strftime('%Y%m%d')}.xlsx"}
         )
