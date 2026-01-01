@@ -156,29 +156,29 @@ def process_dataframe(df: pd.DataFrame, db: Session):
                  final_lat = existing_coords[work_code][0]
                  final_lng = existing_coords[work_code][1]
 
-            # 4. Naming & Type Logic
-            # CLEAN PARENCHAYAT NAME: Remove ", BlockName" suffix if present (e.g. "JAWANGA, GEEDAM" -> "JAWANGA")
+            # 4. Naming & Type Logic (STRICT CONSISTENCY PROTOCOL)
+            # Source 1: Gram Panchayat Column
             raw_gp = str(row.get('Panchayat') or row.get('Gram Panchayat') or row.get('panchayat') or '').strip()
-            gp_name = raw_gp.split(',')[0].strip()
+            # Source 2: District/Block Level Column
+            level_raw = str(row.get('District/Block level') or '').strip()
+            
+            final_location_name = "UNKNOWN"
+            
+            # Logic: If GP exists, use it. Else use Level Name.
+            if raw_gp and raw_gp.lower() != 'nan':
+                 # User Request: "store and display NAKULNAR" -> Upper case for consistency
+                 final_location_name = raw_gp.upper() 
+            elif level_raw and level_raw.lower() != 'nan':
+                 final_location_name = level_raw.upper()
+            else:
+                 final_location_name = "District Level Work" # Fallback
+            
+            gp_name = final_location_name
             
             blk_name = str(row.get('Block') or row.get('Block Name') or row.get('block') or '').strip()
-            # Clean Block Name too if needed, though usually just one word
             
-            level_raw = row.get('District/Block level')
-            level_type = str(level_raw).strip() if pd.notna(level_raw) else ''
-
-            # Logic to detect Block/District level works
-            is_block_level = (bool(level_type) and level_type.lower() != 'nan') or (not gp_name) or (gp_name.lower() == 'nan')
-
-            if is_block_level:
-                 # Check strict "nan" string to avoid overwriting valid GPs (if any logic leaked)
-                 if not gp_name or gp_name.lower() == 'nan' or 'block' in level_type.lower() or 'district' in level_type.lower():
-                     if 'district' in level_type.lower():
-                         gp_name = "District Level Work"
-                     elif 'block' in level_type.lower():
-                         gp_name = "Block Level Work"
-                     else:
-                         gp_name = "Block Level Work"
+            # Helper for Geocoding Logic (Internal use only, doesn't affect display name)
+            is_block_level = (gp_name == level_raw.upper())
 
             # 5. Geocoding Fallback (Only if coords missing)
             if final_lat is None or final_lng is None:

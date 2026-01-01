@@ -617,7 +617,7 @@ const AdminDashboard = () => {
                                                     )}
                                                     {visibleColumns.block && (
                                                         <td className="p-4 text-gray-600 whitespace-nowrap">
-                                                            {work.panchayat}, {work.block}
+                                                            {work.panchayat}
                                                         </td>
                                                     )}
                                                     {visibleColumns.sanctioned_amount && (

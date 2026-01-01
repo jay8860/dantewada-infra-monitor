@@ -146,8 +146,8 @@ async def get_work_filters(db: Session = Depends(get_db)):
     # Fetch all raw values and normalize in Python to ensure case-insensitivity
     def get_clean_values(column):
         raw = db.query(column).distinct().filter(column != None).all()
-        # Title case and deduplicate
-        return sorted(list(set(str(r[0]).strip().title() for r in raw if r[0])))
+        # Deduplicate and strip, but preserve original casing (User Requirement: Exact Similarity)
+        return sorted(list(set(str(r[0]).strip() for r in raw if r[0])))
 
     return {
         "blocks": get_clean_values(models.Work.block),
