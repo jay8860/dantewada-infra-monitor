@@ -283,6 +283,10 @@ const AdminDashboard = () => {
                 }
             });
             if (debouncedSearch) params.append('search', debouncedSearch);
+            if (sortConfig.key) {
+                params.append('sort_by', sortConfig.key);
+                params.append('sort_order', sortConfig.direction);
+            }
 
             const response = await api.get('/works/export', {
                 params,

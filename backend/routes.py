@@ -310,6 +310,33 @@ def build_works_query(db, department, block, panchayat, status, agency, year, se
         ))
     return query
 
+# --- Sorting Helper ---
+def apply_sorting(query, sort_by, sort_order):
+    if not sort_by:
+        return query
+        
+    valid_columns = {
+        'work_name': models.Work.work_name,
+        'department': models.Work.department,
+        'block': models.Work.block,
+        'sanctioned_amount': models.Work.sanctioned_amount,
+        'sanctioned_date': models.Work.sanctioned_date,
+        'current_status': models.Work.current_status,
+        'agency_name': models.Work.agency_name,
+        'financial_year': models.Work.financial_year,
+        'total_released_amount': models.Work.total_released_amount,
+        'amount_pending': models.Work.amount_pending,
+        'probable_completion_date': models.Work.probable_completion_date
+    }
+    
+    col = valid_columns.get(sort_by)
+    if col:
+        if sort_order == 'desc':
+            query = query.order_by(col.desc())
+        else:
+            query = query.order_by(col.asc())
+    return query
+
 @router.get("/works")
 async def get_works(
     response: Response,
@@ -332,27 +359,7 @@ async def get_works(
     response.headers["X-Total-Count"] = str(total_count)
     
     # Sorting
-    if sort_by:
-        valid_columns = {
-            'work_name': models.Work.work_name,
-            'department': models.Work.department,
-            'block': models.Work.block,
-            'sanctioned_amount': models.Work.sanctioned_amount,
-            'sanctioned_date': models.Work.sanctioned_date,
-            'current_status': models.Work.current_status,
-            'agency_name': models.Work.agency_name,
-            'financial_year': models.Work.financial_year,
-            'total_released_amount': models.Work.total_released_amount,
-            'amount_pending': models.Work.amount_pending,
-            'probable_completion_date': models.Work.probable_completion_date
-        }
-        
-        col = valid_columns.get(sort_by)
-        if col:
-            if sort_order == 'desc':
-                query = query.order_by(col.desc())
-            else:
-                query = query.order_by(col.asc())
+    query = apply_sorting(query, sort_by, sort_order)
     
     return query.offset(skip).limit(limit).all()
 
@@ -365,10 +372,13 @@ async def export_works(
     agency: Optional[List[str]] = Query(None),
     year: Optional[List[str]] = Query(None),
     search: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "asc",
     db: Session = Depends(get_db)
 ):
     try:
         query = build_works_query(db, department, block, panchayat, status, agency, year, search)
+        query = apply_sorting(query, sort_by, sort_order)
         results = query.all()
         print(f"DEBUG: Export found {len(results)} rows")
         
