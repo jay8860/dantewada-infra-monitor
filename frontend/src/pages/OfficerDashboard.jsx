@@ -1,6 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
-import { saveOfflineUpdate, getPendingUpdates, deletePendingUpdate } from '../offlineManager';
+import { saveOfflineUpdate, getPendingUpdates, deletePendingUpdate, clearAllUpdates } from '../offlineManager';
+
+// ... (in OfficerDashboard component)
+
+// --- Clean Pending ---
+const handleClearPending = async () => {
+    if (window.confirm("Are you sure you want to clear all offline updates? This cannot be undone.")) {
+        await clearAllUpdates();
+        setPendingCount(0);
+        alert("Cleared all pending updates.");
+    }
+};
+
+// ... (Inside Header render)
+{
+    pendingCount > 0 && (
+        <div className="flex gap-2">
+            <button onClick={handleSync} className="text-yellow-400 animate-pulse flex items-center gap-1 text-xs font-bold border border-yellow-400 px-2 py-1 rounded">
+                <RefreshCw size={14} /> Sync ({pendingCount})
+            </button>
+            <button onClick={handleClearPending} className="text-red-400 flex items-center gap-1 text-xs font-bold border border-red-400 px-2 py-1 rounded hover:bg-red-400/10">
+                <AlertTriangle size={14} /> Clear
+            </button>
+        </div>
+    )
+}
+<button onClick={handleLogout} className="text-white/80 hover:text-white p-2 rounded-full hover:bg-white/10 transition">
+    <LogOut size={20} />
+</button>
 import { useAuth } from '../contexts/AuthContext';
 import { MapPin, RefreshCw, LogOut, Search, Clock, AlertTriangle, CheckCircle, Calendar, ChevronLeft, ChevronRight, Camera } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -303,9 +331,21 @@ const OfficerDashboard = () => {
                 </div>
                 <div className="flex items-center gap-3">
                     {pendingCount > 0 && (
-                        <button onClick={handleSync} className="text-yellow-400 animate-pulse flex items-center gap-1 text-xs font-bold border border-yellow-400 px-2 py-1 rounded">
-                            <RefreshCw size={14} /> Sync ({pendingCount})
-                        </button>
+                        <div className="flex gap-2">
+                            <button onClick={handleSync} className="text-yellow-400 animate-pulse flex items-center gap-1 text-xs font-bold border border-yellow-400 px-2 py-1 rounded">
+                                <RefreshCw size={14} /> Sync ({pendingCount})
+                            </button>
+                            <button onClick={async () => {
+                                if (window.confirm("Delete all pending offline updates?")) {
+                                    const { clearAllUpdates } = await import('../offlineManager');
+                                    await clearAllUpdates();
+                                    setPendingCount(0);
+                                    alert("Cleared.");
+                                }
+                            }} className="text-red-400 flex items-center gap-1 text-xs font-bold border border-red-400 px-2 py-1 rounded hover:bg-red-400/10">
+                                <AlertTriangle size={14} /> Clear
+                            </button>
+                        </div>
                     )}
                     <button onClick={handleLogout} className="text-white/80 hover:text-white p-2 rounded-full hover:bg-white/10 transition">
                         <LogOut size={20} />
