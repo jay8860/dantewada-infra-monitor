@@ -162,19 +162,29 @@ const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
                         <div className="grid grid-cols-2 gap-4">
                             <div className="col-span-2">
                                 <p className="text-xs text-gray-400">Work Name</p>
-                                <p className="text-sm font-medium">{displayWork.work_name}</p>
+                                <p className="text-sm font-medium font-hindi text-blue-800 leading-snug">
+                                    {displayWork.work_name_brief || displayWork.work_name}
+                                </p>
                             </div>
+
                             <div className="col-span-2">
-                                <p className="text-xs text-gray-400">Brief Name (Hindi)</p>
-                                <p className="text-sm font-medium font-hindi">{displayWork.work_name_brief || '-'}</p>
+                                <p className="text-xs text-gray-400">Agency Name</p>
+                                <p className="text-sm font-medium">{displayWork.agency_name || '-'}</p>
                             </div>
+
                             <div>
+                                <p className="text-xs text-gray-400">AS Date</p>
+                                <p className="text-sm font-medium">{displayWork.sanctioned_date ? new Date(displayWork.sanctioned_date).toLocaleDateString() : '-'}</p>
+                            </div>
+
+                            <div>
+                                <p className="text-xs text-gray-400">AS Number</p>
+                                <p className="text-sm font-medium">{displayWork.as_number}</p>
+                            </div>
+
+                            <div className="col-span-2">
                                 <p className="text-xs text-gray-400">Panchayat / Block</p>
                                 <p className="text-sm font-medium">{displayWork.panchayat}, {displayWork.block}</p>
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-400">Financial Year</p>
-                                <p className="text-sm font-medium">{displayWork.financial_year}</p>
                             </div>
                         </div>
                     </div>

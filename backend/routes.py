@@ -120,12 +120,17 @@ async def get_work_stats(db: Session = Depends(get_db)):
     
     total = sum(stats.values())
     
+    # Last Sync Time
+    last_sync_meta = db.query(models.SystemMetadata).filter(models.SystemMetadata.key == "last_sync_time").first()
+    last_sync = last_sync_meta.value if last_sync_meta else None
+
     return {
         "total": total,
         "completed": stats.get('Completed', 0),
         "in_progress": stats.get('In Progress', 0),
         "not_started": stats.get('Not Started', 0),
-        "halted": stats.get('Halted', 0)
+        "halted": stats.get('Halted', 0),
+        "last_sync": last_sync
     }
 
 @router.get("/works/filters")

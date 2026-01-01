@@ -517,9 +517,15 @@ const AdminDashboard = () => {
                         <div className="fixed inset-0 bg-black/50 z-[2000] flex items-center justify-center p-4">
                             <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
                                 <h3 className="text-lg font-bold mb-2">Sync with Google Sheet</h3>
-                                <p className="text-xs text-gray-500 mb-4">
-                                    Sync data from the District Master Sheet or a custom sheet.
-                                </p>
+                                <div className="text-xs text-gray-500 mb-4 flex justify-between items-start">
+                                    <p>Sync data from the District Master Sheet or a custom sheet.</p>
+                                    {globalStats.last_sync && (
+                                        <div className="text-right">
+                                            <p className="font-semibold text-blue-600">Last Synced:</p>
+                                            <p>{new Date(globalStats.last_sync).toLocaleString()}</p>
+                                        </div>
+                                    )}
+                                </div>
 
                                 <div className="space-y-4">
                                     <button

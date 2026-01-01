@@ -34,8 +34,10 @@ def process_dataframe(df: pd.DataFrame, db: Session):
     # Normalize columns
     df.columns = df.columns.astype(str).str.strip()
     
-    # 1. Fetch existing codes
-    all_existing_codes = {res[0] for res in db.query(models.Work.work_code).all()}
+    # 1. Fetch existing codes and coordinates to preserve them if missing in update
+    existing_works = db.query(models.Work.work_code, models.Work.latitude, models.Work.longitude).all()
+    all_existing_codes = {w.work_code for w in existing_works}
+    existing_coords = {w.work_code: (w.latitude, w.longitude) for w in existing_works}
     
     to_insert = []
     to_update = []
@@ -71,6 +73,18 @@ def process_dataframe(df: pd.DataFrame, db: Session):
             if str(status_val).lower() == 'unstarted': status_val = 'Not Started'
             if str(status_val).lower() == 'prossece': status_val = 'In Progress' # Handle specific typo if needed, or stick to raw
 
+            # Coordinate Logic: New > Existing > None
+            new_lat = float(row.get('Latitude')) if 'Latitude' in row and pd.notna(row.get('Latitude')) else (float(row.get('latitude')) if 'latitude' in row and pd.notna(row.get('latitude')) else None)
+            new_lng = float(row.get('Longitude')) if 'Longitude' in row and pd.notna(row.get('Longitude')) else (float(row.get('longitude')) if 'longitude' in row and pd.notna(row.get('longitude')) else None)
+            
+            final_lat = new_lat
+            final_lng = new_lng
+            
+            if (final_lat is None or final_lng is None) and work_code in existing_coords:
+                 # Reduce regression: Keep existing if new is missing
+                 final_lat = existing_coords[work_code][0]
+                 final_lng = existing_coords[work_code][1]
+
             data = {
                'work_code': work_code, 
                'department': row.get('Department') or row.get('SECTOR') or row.get('Sector') or row.get('department'),
@@ -105,8 +119,8 @@ def process_dataframe(df: pd.DataFrame, db: Session):
                'csv_photo_info': str(row.get('Photo with Date') or ''), 
                
                # Coordinates
-               'latitude': float(row.get('Latitude')) if 'Latitude' in row and pd.notna(row.get('Latitude')) else (float(row.get('latitude')) if 'latitude' in row and pd.notna(row.get('latitude')) else None),
-               'longitude': float(row.get('Longitude')) if 'Longitude' in row and pd.notna(row.get('Longitude')) else (float(row.get('longitude')) if 'longitude' in row and pd.notna(row.get('longitude')) else None)
+               'latitude': final_lat,
+               'longitude': final_lng
             }
 
             if work_code in all_existing_codes:
@@ -135,6 +149,16 @@ def process_dataframe(df: pd.DataFrame, db: Session):
         
         if final_updates:
             db.bulk_update_mappings(models.Work, final_updates)
+
+    # --- Update Last Sync Time ---
+    sync_meta = db.query(models.SystemMetadata).filter(models.SystemMetadata.key == "last_sync_time").first()
+    if not sync_meta:
+        sync_meta = models.SystemMetadata(key="last_sync_time", value=datetime.utcnow().isoformat())
+        db.add(sync_meta)
+    else:
+        sync_meta.value = datetime.utcnow().isoformat()
+        sync_meta.updated_at = datetime.utcnow()
+
 
     db.commit()
     
