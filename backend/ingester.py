@@ -183,14 +183,23 @@ def process_dataframe(df: pd.DataFrame, db: Session):
     if to_update:
         # Fetch ID mapping for updates
         code_to_id = {w.work_code: w.id for w in db.query(models.Work.id, models.Work.work_code).all()}
-        final_updates = []
+        
+        # Split into batches based on keys to ensure bulk_update works (SQLAlchemy needs uniform keys)
+        updates_with_coords = []
+        updates_without_coords = []
+        
         for item in to_update:
             if item['work_code'] in code_to_id:
                 item['id'] = code_to_id[item['work_code']]
-                final_updates.append(item)
+                if 'latitude' in item:
+                    updates_with_coords.append(item)
+                else:
+                    updates_without_coords.append(item)
         
-        if final_updates:
-            db.bulk_update_mappings(models.Work, final_updates)
+        if updates_with_coords:
+            db.bulk_update_mappings(models.Work, updates_with_coords)
+        if updates_without_coords:
+            db.bulk_update_mappings(models.Work, updates_without_coords)
 
     # --- Update Last Sync Time ---
     sync_meta = db.query(models.SystemMetadata).filter(models.SystemMetadata.key == "last_sync_time").first()
