@@ -169,10 +169,16 @@ def process_dataframe(df: pd.DataFrame, db: Session):
                 # Level column populated means Block Level. Empty means GP (as per user).
                 is_block_level = (bool(level_type) and level_type.lower() != 'nan') or (not gp_name) or (gp_name.lower() == 'nan')
                 
-                # Force "Block Level" naming if it is block level to ensure Red Pin
+                # Force "Block Level" or "District Level" naming based on the column
                 if is_block_level:
                     if not gp_name or gp_name.lower() == 'nan' or 'block' in level_type.lower() or 'district' in level_type.lower():
-                         gp_name = f"Block Level Work" # Standardize name for Frontend Cluster Logic
+                         if 'district' in level_type.lower():
+                             gp_name = "District Level Work"
+                         elif 'block' in level_type.lower():
+                             gp_name = "Block Level Work"
+                         else:
+                             # Default fallback if column is empty but GP is missing
+                             gp_name = "Block Level Work"
 
                 if (final_lat is None) and blk_name and is_block_level:
                     if blk_name.upper() in BLOCK_CENTERS:
