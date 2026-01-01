@@ -58,6 +58,29 @@ class Work(Base):
     assignment_status = Column(String, default="Pending") # Pending, Completed
     inspection_deadline = Column(DateTime, nullable=True) 
     assigned_officer = relationship("User")
+    inspections = relationship("Inspection", back_populates="work")
+
+class Inspection(Base):
+    __tablename__ = "inspections"
+    id = Column(Integer, primary_key=True, index=True)
+    work_id = Column(Integer, ForeignKey("works.id"))
+    inspector_name = Column(String)
+    status_at_time = Column(String)
+    remarks = Column(Text, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    inspection_date = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    work = relationship("Work", back_populates="inspections")
+    photos = relationship("InspectionPhoto", back_populates="inspection")
+
+class InspectionPhoto(Base):
+    __tablename__ = "inspection_photos"
+    id = Column(Integer, primary_key=True, index=True)
+    inspection_id = Column(Integer, ForeignKey("inspections.id"))
+    image_path = Column(String)
+    
+    inspection = relationship("Inspection", back_populates="photos")
 
 # New Model for System-wide settings/metadata
 class SystemMetadata(Base):
