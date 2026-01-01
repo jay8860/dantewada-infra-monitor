@@ -9,7 +9,21 @@ import re
 
 DEFAULT_SHEET_URL = "https://docs.google.com/spreadsheets/d/10zFqsggEyiJ94sV0DojfC3VHeHplg2lh9_J_AEE9E3U/edit?usp=sharing"
 SHEET_TAB_NAME = "Work progress (Approved AS works)"
+import time
+
 # --- Helpers ---
+def fetch_osm_coords(query):
+    try:
+        time.sleep(1.1)
+        headers = {'User-Agent': 'dantewada_works_monitor_v1_sync'}
+        url = "https://nominatim.openstreetmap.org/search"
+        resp = requests.get(url, params={'q': query, 'format': 'json', 'limit': 1}, headers=headers, timeout=5)
+        if resp.status_code == 200 and resp.json():
+            return float(resp.json()[0]['lat']), float(resp.json()[0]['lon'])
+    except Exception as e:
+        print(f"OSM Error for {query}: {e}")
+    return None, None
+
 def parse_date(row, col_name):
     if col_name in row and pd.notna(row[col_name]):
         try:
@@ -35,10 +49,18 @@ def process_dataframe(df: pd.DataFrame, db: Session):
     df.columns = df.columns.astype(str).str.strip()
     
     # 1. Fetch existing codes and coordinates to preserve them if missing in update
-    existing_works = db.query(models.Work.work_code, models.Work.latitude, models.Work.longitude).all()
+    existing_works = db.query(models.Work.work_code, models.Work.latitude, models.Work.longitude, models.Work.panchayat, models.Work.block).all()
     all_existing_codes = {w.work_code for w in existing_works}
     existing_coords = {w.work_code: (w.latitude, w.longitude) for w in existing_works}
     
+    # Build GP Cache from DB to avoid API calls
+    # Map "GP_BLOCK" -> (lat, lng)
+    gp_coords_cache = {}
+    for w in existing_works:
+        if w.latitude and w.longitude and w.panchayat and w.block:
+            key = f"{str(w.panchayat).strip().upper()}_{str(w.block).strip().upper()}"
+            gp_coords_cache[key] = (w.latitude, w.longitude)
+
     to_insert = []
     to_update = []
     seen_in_batch = set()
@@ -84,6 +106,25 @@ def process_dataframe(df: pd.DataFrame, db: Session):
                  # Reduce regression: Keep existing if new is missing
                  final_lat = existing_coords[work_code][0]
                  final_lng = existing_coords[work_code][1]
+
+            # 3. New Work / Missing Coords -> Try GP Cache or OSM
+            if final_lat is None or final_lng is None:
+                gp_name = str(row.get('Panchayat') or row.get('Gram Panchayat') or row.get('panchayat') or '').strip()
+                blk_name = str(row.get('Block') or row.get('Block Name') or row.get('block') or '').strip()
+                
+                if gp_name and blk_name:
+                    cache_key = f"{gp_name.upper()}_{blk_name.upper()}"
+                    
+                    # Try Cache
+                    if cache_key in gp_coords_cache:
+                        final_lat, final_lng = gp_coords_cache[cache_key]
+                    else:
+                        # Try OSM (fallback)
+                        print(f"Geocoding New Location: {gp_name}, {blk_name}")
+                        osm_lat, osm_lng = fetch_osm_coords(f"{gp_name}, {blk_name}, Dantewada, Chhattisgarh")
+                        if osm_lat:
+                            final_lat, final_lng = osm_lat, osm_lng
+                            gp_coords_cache[cache_key] = (final_lat, final_lng) # Update cache for this batch
 
             data = {
                'work_code': work_code, 
@@ -152,11 +193,14 @@ def process_dataframe(df: pd.DataFrame, db: Session):
 
     # --- Update Last Sync Time ---
     sync_meta = db.query(models.SystemMetadata).filter(models.SystemMetadata.key == "last_sync_time").first()
+    # Use UTC with 'Z' suffix to ensure frontend parses as UTC
+    now_iso = datetime.utcnow().isoformat() + 'Z'
+    
     if not sync_meta:
-        sync_meta = models.SystemMetadata(key="last_sync_time", value=datetime.utcnow().isoformat())
+        sync_meta = models.SystemMetadata(key="last_sync_time", value=now_iso)
         db.add(sync_meta)
     else:
-        sync_meta.value = datetime.utcnow().isoformat()
+        sync_meta.value = now_iso
         sync_meta.updated_at = datetime.utcnow()
 
 

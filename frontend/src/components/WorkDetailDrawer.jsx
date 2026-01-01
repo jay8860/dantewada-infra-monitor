@@ -155,97 +155,80 @@ const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
                 <hr className="my-6 border-gray-100" />
 
                 {/* Details Grid */}
-                <div className="space-y-6">
-                    {/* Basic Info */}
+                <div className="space-y-8">
+                    {/* Basic Context */}
                     <div>
-                        <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">Basic Info</h4>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="col-span-2">
-                                <p className="text-xs text-gray-400">Work Name</p>
-                                <p className="text-sm font-medium font-hindi text-blue-800 leading-snug">
-                                    {displayWork.work_name_brief || displayWork.work_name}
-                                </p>
-                            </div>
-
-                            <div className="col-span-2">
-                                <p className="text-xs text-gray-400">Agency Name</p>
-                                <p className="text-sm font-medium">{displayWork.agency_name || '-'}</p>
-                            </div>
-
-                            <div>
-                                <p className="text-xs text-gray-400">AS Date</p>
-                                <p className="text-sm font-medium">{displayWork.sanctioned_date ? new Date(displayWork.sanctioned_date).toLocaleDateString() : '-'}</p>
-                            </div>
-
-                            <div>
-                                <p className="text-xs text-gray-400">AS Number</p>
-                                <p className="text-sm font-medium">{displayWork.as_number}</p>
-                            </div>
-
-                            <div className="col-span-2">
-                                <p className="text-xs text-gray-400">Panchayat / Block</p>
-                                <p className="text-sm font-medium">{displayWork.panchayat}, {displayWork.block}</p>
-                            </div>
-                        </div>
+                        <p className="text-xs font-bold text-gray-500 uppercase mb-2">Work Identity</p>
+                        <p className="text-lg font-medium font-hindi text-blue-900 leading-snug mb-1">
+                            {displayWork.work_name_brief || displayWork.work_name}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                            {displayWork.panchayat}, {displayWork.block}
+                        </p>
                     </div>
 
-                    <hr className="border-dashed" />
-
-                    {/* Financials */}
+                    {/* Agency & Execution */}
                     <div>
-                        <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">Financials</h4>
-                        <div className="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-lg border">
-                            <div>
-                                <p className="text-xs text-gray-400">AS Amount</p>
-                                <p className="text-sm font-bold text-blue-900">₹{displayWork.sanctioned_amount?.toLocaleString()} Lakhs</p>
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-400">Evaluation Amt</p>
-                                <p className="text-sm font-bold text-gray-700">₹{displayWork.evaluation_amount?.toLocaleString() || '-'} Lakhs</p>
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-400">Total Released</p>
-                                <p className="text-sm font-bold text-green-700">₹{displayWork.total_released_amount?.toLocaleString() || '-'} Lakhs</p>
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-400">Pending Amt</p>
-                                <p className="text-sm font-bold text-red-700">₹{displayWork.amount_pending?.toLocaleString() || '-'} Lakhs</p>
-                            </div>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-2 italic">Released Details: {displayWork.agency_release_details || 'N/A'}</p>
-                    </div>
-
-                    <hr className="border-dashed" />
-
-                    {/* Agency & Dates */}
-                    <div>
-                        <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">Agency & Execution</h4>
-                        <div className="space-y-2">
-                            <div className="flex justify-between">
+                        <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 border-b pb-1">Agency & Execution</h4>
+                        <div className="grid grid-cols-1 gap-y-3">
+                            <div className="flex justify-between items-center">
                                 <span className="text-sm text-gray-500">Agency Name</span>
-                                <span className="text-sm font-medium text-right">{displayWork.agency_name || '-'}</span>
+                                <span className="text-sm font-medium text-right max-w-[60%] truncate" title={displayWork.agency_name}>{displayWork.agency_name || '-'}</span>
                             </div>
-                            <div className="flex justify-between">
+                            <div className="flex justify-between items-center">
                                 <span className="text-sm text-gray-500">AS Number</span>
-                                <span className="text-sm font-medium text-right">{displayWork.as_number || '-'}</span>
+                                <span className="text-sm font-medium text-right">{displayWork.as_number}</span>
                             </div>
-                            <div className="flex justify-between">
+                            <div className="flex justify-between items-center">
                                 <span className="text-sm text-gray-500">AS Date</span>
                                 <span className="text-sm font-medium text-right">{displayWork.sanctioned_date ? new Date(displayWork.sanctioned_date).toLocaleDateString() : '-'}</span>
                             </div>
-                            <div className="flex justify-between">
-                                <span className="text-sm text-gray-500">Tender Date</span>
-                                <span className="text-sm font-medium text-right">{displayWork.tender_date ? new Date(displayWork.tender_date).toLocaleDateString() : '-'}</span>
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm text-gray-500">Sanctioned Amount</span>
+                                <span className="text-sm font-medium text-right">₹{displayWork.sanctioned_amount?.toLocaleString()} Lakhs</span>
                             </div>
-                            <div className="flex justify-between">
-                                <span className="text-sm text-gray-500">Probable Completion</span>
-                                <span className="text-sm font-medium text-right">{displayWork.probable_completion_date ? new Date(displayWork.probable_completion_date).toLocaleDateString() : '-'}</span>
+                        </div>
+                    </div>
+
+                    {/* Financial Status */}
+                    <div>
+                        <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 border-b pb-1">Financial Status</h4>
+                        <div className="grid grid-cols-1 gap-y-3">
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm text-gray-500">Total Released</span>
+                                <span className="text-sm font-medium text-right text-green-700">₹{displayWork.total_released_amount?.toLocaleString()} Lakhs</span>
                             </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm text-gray-500">Pending Amount</span>
+                                <span className="text-sm font-medium text-right text-red-600">₹{displayWork.amount_pending?.toLocaleString()} Lakhs</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Inspection & Progress */}
+                    <div>
+                        <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 border-b pb-1">Progress & Inspection</h4>
+                        <div className="grid grid-cols-1 gap-y-3">
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm text-gray-500">Current Status</span>
+                                <span className={`px-2 py-0.5 rounded text-xs font-bold ${displayWork.current_status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-800'}`}>
+                                    {displayWork.current_status}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-start">
+                                <span className="text-sm text-gray-500 whitespace-nowrap mr-4">Remark</span>
+                                <span className="text-sm text-gray-700 text-right italic">{displayWork.remark || 'No remarks'}</span>
+                            </div>
+                            {displayWork.inspection_date && (
+                                <div className="flex justify-between items-center mt-2 pt-2 border-t border-dashed">
+                                    <span className="text-sm text-gray-500">Last Inspection</span>
+                                    <span className="text-sm font-medium text-right">{new Date(displayWork.inspection_date).toLocaleDateString()}</span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
 
-                <hr className="my-6 border-gray-100" />
 
                 {/* Photos */}
                 <div>
@@ -274,8 +257,8 @@ const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
                         )}
                     </div>
                 </div>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 };
 
