@@ -291,11 +291,12 @@ const AdminDashboard = () => {
     };
 
     return (
+        <div className="flex flex-col h-screen bg-gray-50 text-gray-800 font-sans">
             <header className="bg-white border-b sticky top-0 z-30 px-6 py-3 flex justify-between items-center shadow-sm">
                 <div className="flex items-center gap-3">
-                    <img 
-                        src="https://dantewada.nic.in/wp-content/themes/district-theme-9/images/emblem-dark.png" 
-                        alt="Dantewada Emblem" 
+                    <img
+                        src="https://dantewada.nic.in/wp-content/themes/district-theme-9/images/emblem-dark.png"
+                        alt="Dantewada Emblem"
                         className="h-12 w-auto object-contain"
                     />
                     <div>
@@ -334,7 +335,7 @@ const AdminDashboard = () => {
                 <div className="bg-white p-4 border-b flex flex-col md:flex-row gap-4 justify-between items-center shadow-sm z-20">
                     <div className="flex gap-4 w-full md:w-auto">
                         <div className="bg-gray-100 p-1 rounded-lg flex">
-                             {/* ... buttons ... */}
+                            {/* ... buttons ... */}
                             <button
                                 onClick={() => setViewMode('table')}
                                 className={`px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition ${viewMode === 'table' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
@@ -394,8 +395,8 @@ const AdminDashboard = () => {
                             value={filters.agency}
                             onChange={(val) => setFilters(p => ({ ...p, agency: val }))}
                         />
-                        
-                         <MultiSelect
+
+                        <MultiSelect
                             label="Financial Year"
                             placeholder="All Years"
                             options={filterOptions.years || []}
@@ -700,59 +701,59 @@ const AdminDashboard = () => {
                 onClose={() => setIsDrawerOpen(false)}
             />
 
-    {/* Assignment Modal */ }
-    {
-        assignmentModal.isOpen && (
-            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
-                    <h3 className="text-lg font-bold mb-4">Assign Inspection</h3>
+            {/* Assignment Modal */}
+            {
+                assignmentModal.isOpen && (
+                    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                        <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
+                            <h3 className="text-lg font-bold mb-4">Assign Inspection</h3>
 
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Select Officer</label>
-                            <select
-                                className="w-full border rounded-lg p-2 text-sm"
-                                value={assignmentModal.officerId}
-                                onChange={(e) => setAssignmentModal(prev => ({ ...prev, officerId: e.target.value }))}
-                            >
-                                <option value="">-- Choose Officer --</option>
-                                {officers.map(off => (
-                                    <option key={off.id} value={off.id}>{off.username} ({off.department || 'General'})</option>
-                                ))}
-                            </select>
-                        </div>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Select Officer</label>
+                                    <select
+                                        className="w-full border rounded-lg p-2 text-sm"
+                                        value={assignmentModal.officerId}
+                                        onChange={(e) => setAssignmentModal(prev => ({ ...prev, officerId: e.target.value }))}
+                                    >
+                                        <option value="">-- Choose Officer --</option>
+                                        {officers.map(off => (
+                                            <option key={off.id} value={off.id}>{off.username} ({off.department || 'General'})</option>
+                                        ))}
+                                    </select>
+                                </div>
 
-                        <div>
-                            <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Deadline (Days from now)</label>
-                            <input
-                                type="number"
-                                placeholder="e.g. 7 (Leave empty for none)"
-                                className="w-full border rounded-lg p-2 text-sm"
-                                value={assignmentModal.days}
-                                onChange={(e) => setAssignmentModal(prev => ({ ...prev, days: e.target.value }))}
-                            />
+                                <div>
+                                    <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Deadline (Days from now)</label>
+                                    <input
+                                        type="number"
+                                        placeholder="e.g. 7 (Leave empty for none)"
+                                        className="w-full border rounded-lg p-2 text-sm"
+                                        value={assignmentModal.days}
+                                        onChange={(e) => setAssignmentModal(prev => ({ ...prev, days: e.target.value }))}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="mt-6 flex gap-3 justify-end">
+                                <button
+                                    onClick={() => setAssignmentModal({ isOpen: false, workId: null, officerId: '', days: '' })}
+                                    className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-100 rounded-lg text-sm"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={submitAssignment}
+                                    disabled={!assignmentModal.officerId}
+                                    className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+                                >
+                                    Assign
+                                </button>
+                            </div>
                         </div>
                     </div>
-
-                    <div className="mt-6 flex gap-3 justify-end">
-                        <button
-                            onClick={() => setAssignmentModal({ isOpen: false, workId: null, officerId: '', days: '' })}
-                            className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-100 rounded-lg text-sm"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={submitAssignment}
-                            disabled={!assignmentModal.officerId}
-                            className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
-                        >
-                            Assign
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )
-    }
+                )
+            }
         </div >
     );
 };
