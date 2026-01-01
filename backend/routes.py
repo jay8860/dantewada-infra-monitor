@@ -87,49 +87,22 @@ async def upload_works(
 # --- Google Sheet Sync ---
 @router.post("/works/sync-sheet")
 async def sync_google_sheet(
-    sheet_url: str = Form(...),
+    sheet_url: Optional[str] = Form(None),
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Syncs data from a Google Sheet. 
-    Expects a standard Google Sheet URL.
-    Url must be accessible (e.g. 'Anyone with link can view' is easiest).
+    If sheet_url is not provided, uses the Default Main Sheet.
     """
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Only admin can sync data")
 
     try:
-        # 1. Parse URL to get Sheet ID
-        # Format: https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit...
-        import re
-        match = re.search(r"/d/([a-zA-Z0-9-_]+)", sheet_url)
-        if not match:
-            raise HTTPException(status_code=400, detail="Invalid Google Sheet URL")
-        
-        sheet_id = match.group(1)
-        
-        # 2. Construct CSV Export URL for specific sheet
-        # User requested sheet name: "Work progress (Approved AS works)"
-        # We need to URL encode the sheet name.
-        sheet_name = "Work progress (Approved AS works)"
-        import urllib.parse
-        encoded_sheet_name = urllib.parse.quote(sheet_name)
-        
-        csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={encoded_sheet_name}"
-        
-        print(f"Fetching Google Sheet CSV from: {csv_url}")
-        
-        # 3. Fetch Data using Pandas
-        # on_bad_lines='skip' helps with robustness
-        df = pd.read_csv(csv_url, on_bad_lines='skip')
-        
-        if df.empty:
-             raise HTTPException(status_code=400, detail="Sheet was empty or could not be read. Check permissions.")
-
-        # 4. Ingest
         import ingester
-        result = ingester.process_dataframe(df, db)
+        target_url = sheet_url if sheet_url and sheet_url.strip() else ingester.DEFAULT_SHEET_URL
+        
+        result = ingester.sync_from_google_sheet(db, target_url)
         
         return {"message": f"Sync Complete. Processed {result['total_processed']} rows (Inserted: {result['inserted']}, Updated: {result['updated']})"}
 

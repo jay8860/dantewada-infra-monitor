@@ -3,7 +3,12 @@ import pandas as pd
 import models
 from datetime import datetime
 from sqlalchemy.orm import Session
+import requests
+import io
+import re
 
+DEFAULT_SHEET_URL = "https://docs.google.com/spreadsheets/d/10zFqsggEyiJ94sV0DojfC3VHeHplg2lh9_J_AEE9E3U/edit?usp=sharing"
+SHEET_TAB_NAME = "Work progress (Approved AS works)"
 # --- Helpers ---
 def parse_date(row, col_name):
     if col_name in row and pd.notna(row[col_name]):
@@ -139,3 +144,39 @@ def process_dataframe(df: pd.DataFrame, db: Session):
         "updated": len(to_update),
         "errors": errors
     }
+    return {
+        "total_processed": len(df),
+        "inserted": len(to_insert),
+        "updated": len(to_update),
+        "errors": errors
+    }
+
+def sync_from_google_sheet(db: Session, sheet_url: str = DEFAULT_SHEET_URL) -> dict:
+    """
+    Fetches the Google Sheet as CSV and processes it.
+    """
+    # Extract ID
+    match = re.search(r'/d/([a-zA-Z0-9-_]+)', sheet_url)
+    sheet_id = match.group(1) if match else None
+    
+    if not sheet_id:
+        raise ValueError("Invalid Google Sheet URL")
+
+    export_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={SHEET_TAB_NAME}"
+    
+    try:
+        response = requests.get(export_url, timeout=30)
+        response.raise_for_status()
+        
+        # Check if login page returned
+        if "text/html" in response.headers.get("Content-Type", ""):
+             # Try simpler export URL if visualization API fails auth? No, usually public sheets work.
+             # Or maybe the sheet name is wrong?
+             raise ValueError("Google returned HTML (Login Page). Ensure Sheet is Public and Tab Name is correct.")
+
+        df = pd.read_csv(io.BytesIO(response.content), on_bad_lines='skip')
+        return process_dataframe(df, db)
+        
+    except Exception as e:
+        print(f"Sync Logic Failed: {e}")
+        raise e

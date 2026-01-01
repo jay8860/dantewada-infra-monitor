@@ -1,5 +1,6 @@
 fastapi
 uvicorn
+apscheduler
 sqlalchemy
 python-multipart
 python-jose[cryptography]

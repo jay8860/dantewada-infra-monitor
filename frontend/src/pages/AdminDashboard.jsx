@@ -241,12 +241,13 @@ const AdminDashboard = () => {
         }
     }
 
-    const handleSyncSheet = async () => {
-        if (!sheetUrl) return;
+    const handleSyncSheet = async (useDefault = false) => {
+        if (!useDefault && !sheetUrl) return;
         setSyncing(true);
         try {
             const formData = new FormData();
-            formData.append('sheet_url', sheetUrl);
+            if (!useDefault && sheetUrl) formData.append('sheet_url', sheetUrl);
+
             const res = await api.post('/works/sync-sheet', formData);
             alert(res.data.message);
             setSyncModalOpen(false);
@@ -517,31 +518,48 @@ const AdminDashboard = () => {
                             <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
                                 <h3 className="text-lg font-bold mb-2">Sync with Google Sheet</h3>
                                 <p className="text-xs text-gray-500 mb-4">
-                                    Enter the Google Sheet URL. Ensure the sheet "Work progress (Approved AS works)" exists and is viewable by anyone with the link (or public).
+                                    Sync data from the District Master Sheet or a custom sheet.
                                 </p>
 
-                                <input
-                                    type="text"
-                                    placeholder="https://docs.google.com/spreadsheets/d/..."
-                                    className="w-full border rounded-lg p-2 text-sm mb-4"
-                                    value={sheetUrl}
-                                    onChange={(e) => setSheetUrl(e.target.value)}
-                                />
+                                <div className="space-y-4">
+                                    <button
+                                        onClick={() => handleSyncSheet(true)}
+                                        disabled={syncing}
+                                        className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm shadow-md flex justify-center items-center gap-2"
+                                    >
+                                        {syncing ? 'Syncing...' : 'Sync with Main Sheet (Default)'}
+                                    </button>
 
-                                <div className="flex gap-3 justify-end">
-                                    <button
-                                        onClick={() => setSyncModalOpen(false)}
-                                        className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-100 rounded-lg text-sm"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={handleSyncSheet}
-                                        disabled={!sheetUrl || syncing}
-                                        className="px-4 py-2 bg-green-600 text-white font-medium rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
-                                    >
-                                        {syncing ? 'Syncing...' : 'Sync Now'}
-                                    </button>
+                                    <div className="relative flex items-center gap-2 my-2">
+                                        <div className="h-px bg-gray-200 flex-1"></div>
+                                        <span className="text-xs text-gray-400 font-medium">OR USE CUSTOM LINK</span>
+                                        <div className="h-px bg-gray-200 flex-1"></div>
+                                    </div>
+
+                                    <div className="bg-gray-50 p-3 rounded-lg border">
+                                        <input
+                                            type="text"
+                                            placeholder="https://docs.google.com/spreadsheets/d/..."
+                                            className="w-full border rounded-lg p-2 text-sm mb-2 bg-white"
+                                            value={sheetUrl}
+                                            onChange={(e) => setSheetUrl(e.target.value)}
+                                        />
+                                        <div className="flex justify-end gap-2">
+                                            <button
+                                                onClick={() => setSyncModalOpen(false)}
+                                                className="px-3 py-1.5 text-gray-600 font-medium hover:bg-gray-100 rounded text-xs"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                onClick={() => handleSyncSheet(false)}
+                                                disabled={!sheetUrl || syncing}
+                                                className="px-3 py-1.5 bg-gray-800 text-white font-medium rounded text-xs hover:bg-gray-900 disabled:opacity-50"
+                                            >
+                                                Sync Custom Sheet
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
