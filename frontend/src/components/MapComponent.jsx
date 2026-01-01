@@ -14,8 +14,8 @@ const COLORS = {
     YELLOW: '#CA8A04', // In Progress
     RED: '#DC2626',   // Not Started
     PINK: '#EC4899',  // Payment Stuck
-    BLUE: '#2563EB',  // Default Cluster
-    BROWN: '#78350F', // Block Level Cluster
+    BLUE: '#2563EB',  // Default Cluster (GP)
+    BLOCK_RED: '#b91c1c', // Block Level Cluster (Dark Red)
     PURPLE: '#7C3AED' // Assigned
 };
 
@@ -120,9 +120,9 @@ const ClusterLayer = ({ works, onSelect }) => {
         // Helper to create cluster icons
         const createClusterIcon = (cluster, type) => {
             const count = cluster.getChildCount();
-            const color = type === 'BLOCK' ? COLORS.BROWN : COLORS.BLUE;
+            const color = type === 'BLOCK' ? COLORS.BLOCK_RED : COLORS.BLUE;
 
-            // SVG Design (Teardrop with White Circle)
+            // SVG Design
             const svgIcon = `
                 <svg width="50" height="50" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0px 3px 3px rgba(0,0,0,0.3));">
                     <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="${color}" fill-opacity="1" />
@@ -166,7 +166,7 @@ const ClusterLayer = ({ works, onSelect }) => {
             showCoverageOnHover: false,
             maxClusterRadius: 40,
             iconCreateFunction: (cluster) => createClusterIcon(cluster, 'BLOCK'),
-            zoomToBoundsOnClick: true, // Auto zoom on click
+            zoomToBoundsOnClick: true,
         });
 
         // 2. GP Level Group
@@ -176,7 +176,7 @@ const ClusterLayer = ({ works, onSelect }) => {
             showCoverageOnHover: false,
             maxClusterRadius: 40,
             iconCreateFunction: (cluster) => createClusterIcon(cluster, 'GP'),
-            zoomToBoundsOnClick: true, // Auto zoom on click
+            zoomToBoundsOnClick: true,
         });
 
         const blockMarkers = [];
@@ -188,7 +188,9 @@ const ClusterLayer = ({ works, onSelect }) => {
 
             if (lat && lng) {
                 // Determine type
-                const isBlock = work.panchayat && (work.panchayat.includes('Block Level') || work.panchayat.includes('District Level'));
+                // Backend uses "Block Level" string or empty GP logic
+                // If GP is empty/null, or explicitly marked
+                const isBlock = !work.gp || (work.gp && (work.gp.includes('Block Level') || work.gp.includes('District Level')));
                 const marker = createMarker(work);
 
                 if (isBlock) {
@@ -224,7 +226,7 @@ const MapLegend = () => {
                 <div className="space-y-2">
                     {/* Clusters */}
                     <div className="flex items-center gap-2">
-                        <MapPin size={24} fill={COLORS.BROWN} stroke="white" strokeWidth={1.5} className="text-[#78350F]" />
+                        <MapPin size={24} fill={COLORS.BLOCK_RED} stroke="white" strokeWidth={1.5} className="text-[#b91c1c]" />
                         <span>Block/District Level Cluster</span>
                     </div>
                     <div className="flex items-center gap-2">

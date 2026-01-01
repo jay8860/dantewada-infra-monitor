@@ -73,6 +73,15 @@ def process_dataframe(df: pd.DataFrame, db: Session):
     
     errors = 0
     
+    # Block Centers (Approximated)
+    BLOCK_CENTERS = {
+        'DANTEWADA': (18.8956, 81.3503),
+        'GEEDAM': (18.9691, 81.3994),
+        'KUWAKONDA': (18.7303, 81.2585),
+        'KATEKALYAN': (18.8021, 81.5647),
+        'BARSOOR': (19.1033, 81.3789)
+    }
+
     for idx, row in df.iterrows():
         try:
             # --- 1. Identify Work Code ---
@@ -99,7 +108,7 @@ def process_dataframe(df: pd.DataFrame, db: Session):
             # Status Normalization
             status_val = row.get('Work Status') or row.get('current_status') or 'Not Started'
             if str(status_val).lower() == 'unstarted': status_val = 'Not Started'
-            if str(status_val).lower() == 'prossece': status_val = 'In Progress' # Handle specific typo if needed, or stick to raw
+            if str(status_val).lower() == 'prossece': status_val = 'In Progress' 
 
             # Coordinate Logic: New > Existing > None
             new_lat = float(row.get('Latitude')) if 'Latitude' in row and pd.notna(row.get('Latitude')) else (float(row.get('latitude')) if 'latitude' in row and pd.notna(row.get('latitude')) else None)
@@ -109,32 +118,48 @@ def process_dataframe(df: pd.DataFrame, db: Session):
             final_lng = new_lng
             
             if (final_lat is None or final_lng is None) and work_code in existing_coords:
-                 # Reduce regression: Keep existing if new is missing
+                 # Keep existing if new is missing
                  final_lat = existing_coords[work_code][0]
                  final_lng = existing_coords[work_code][1]
 
-            # 3. New Work / Missing Coords -> Try GP Cache (DB based only)
+            # 3. Geocoding Fallback
+            gp_name = str(row.get('Panchayat') or row.get('Gram Panchayat') or row.get('panchayat') or '').strip()
+            blk_name = str(row.get('Block') or row.get('Block Name') or row.get('block') or '').strip()
+            
+            # New field for District/Block Level
+            level_raw = row.get('District/Block level')
+            level_type = str(level_raw).strip() if pd.notna(level_raw) else ''
+
             if final_lat is None or final_lng is None:
-                gp_name = str(row.get('Panchayat') or row.get('Gram Panchayat') or row.get('panchayat') or '').strip()
-                blk_name = str(row.get('Block') or row.get('Block Name') or row.get('block') or '').strip()
-                
-                if gp_name and blk_name:
+                # A. Try GP Cache (DB based)
+                if gp_name and blk_name and gp_name.lower() != 'nan':
                     cache_key = f"{gp_name.upper()}_{blk_name.upper()}"
                     if cache_key in gp_coords_cache:
                         final_lat, final_lng = gp_coords_cache[cache_key]
+                
+                # B. Try Block Center (If GP missing or Cache miss, AND level implies Block/District)
+                if (final_lat is None) and blk_name:
+                    # Check if it's explicitly a Block/District level work OR simply missing GP
+                    # Level column populated means Block Level. Empty means GP (as per user).
+                    is_block_level = (bool(level_type) and level_type.lower() != 'nan') or (not gp_name) or (gp_name.lower() == 'nan')
+                    
+                    if is_block_level and blk_name.upper() in BLOCK_CENTERS:
+                        final_lat, final_lng = BLOCK_CENTERS[blk_name.upper()]
+                        # Ensure we flag this for the frontend Red Pin (by setting Panchayat special string?)
+                        if not gp_name or gp_name.lower() == 'nan':
+                            gp_name = "Block Level" 
 
             data = {
                'work_code': work_code, 
                'department': row.get('Department') or row.get('SECTOR') or row.get('Sector') or row.get('department'),
                'financial_year': str(row.get('Financial Year') or row.get('YEAR') or row.get('financial_year') or ''),
-               'block': row.get('Block') or row.get('Block Name') or row.get('block'),
-               'panchayat': row.get('Panchayat') or row.get('Gram Panchayat') or row.get('panchayat'),
+               'block': blk_name,
+               'panchayat': gp_name,
                'work_name': row.get('Work Name') or row.get('work name') or row.get('work_name'),
                'work_name_brief': row.get('Work Name (in brief)'),
                'unique_id': str(row.get('UNIQ ID') or row.get('UNIQUE ID') or ''),
                'as_number': str(row.get('AS Number') or ''),
                
-               # Amount Logic prioritizing clean headers
                'sanctioned_amount': parse_float(row, 'Sanctioned Amount') if 'Sanctioned Amount' in row else (parse_float(row, 'AS Amount (in Rs)') if 'AS Amount (in Rs)' in row else parse_float(row, 'sanctioned_amount')),
                'sanctioned_date': parse_date(row, 'Sanctioned Date') if 'Sanctioned Date' in row else (parse_date(row, 'AS Date') if 'AS Date' in row else parse_date(row, 'sanctioned_date')),
                
@@ -155,12 +180,9 @@ def process_dataframe(df: pd.DataFrame, db: Session):
                'inspection_date': parse_date(row, 'Date of Inspection'),
                'remark': row.get('Remark'),
                'csv_photo_info': str(row.get('Photo with Date') or ''), 
-               
-               'remark': row.get('Remark'),
-               'csv_photo_info': str(row.get('Photo with Date') or ''), 
             }
             
-            # Non-Destructive Update: Only include coords if valid
+            # Non-Destructive Update: Only include coords if valid (either explicit or fallback)
             if final_lat is not None and final_lng is not None:
                 data['latitude'] = final_lat
                 data['longitude'] = final_lng
