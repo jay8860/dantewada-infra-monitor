@@ -46,6 +46,7 @@ const AdminDashboard = () => {
         total_released_amount: true,
         amount_pending: true,
         probable_completion_date: false, // hidden by default to save space
+        assignment: true
     });
 
     // --- State: Assignment ---
@@ -58,6 +59,7 @@ const AdminDashboard = () => {
     const [loading, setLoading] = useState(false);
     const [mapLoading, setMapLoading] = useState(false);
     const [file, setFile] = useState(null);
+    const [downloading, setDownloading] = useState(false);
     const [showColumnMenu, setShowColumnMenu] = useState(false);
 
     // --- State: Sync ---
@@ -255,6 +257,38 @@ const AdminDashboard = () => {
             alert(`Sync Failed: ${error.response?.data?.detail || error.message}`);
         } finally {
             setSyncing(false);
+        }
+    };
+
+    const handleDownload = async () => {
+        setDownloading(true);
+        try {
+            // Build params same as fetchWorks
+            const params = new URLSearchParams();
+            Object.keys(filters).forEach(key => {
+                const val = filters[key];
+                if (val) params.append(key, val);
+            });
+            if (debouncedSearch) params.append('search', debouncedSearch);
+
+            const response = await api.get('/works/export', {
+                params,
+                responseType: 'blob'
+            });
+
+            // Create Blob link to download
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `Dantewada_Works_${new Date().toISOString().slice(0, 10)}.xlsx`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error) {
+            console.error("Download failed", error);
+            alert("Failed to download Excel file.");
+        } finally {
+            setDownloading(false);
         }
     };
 
@@ -473,6 +507,20 @@ const AdminDashboard = () => {
                                 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition whitespace-nowrap"
                             >
                                 <ArrowUpDown size={16} /> <span className="hidden sm:inline">Sync GSheet</span>
+                            </button>
+
+                            {/* Download Excel */}
+                            <button
+                                onClick={handleDownload}
+                                disabled={downloading}
+                                className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition whitespace-nowrap disabled:opacity-50"
+                            >
+                                {downloading ? (
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                ) : (
+                                    <Upload size={16} className="rotate-180" />
+                                )}
+                                <span className="hidden sm:inline">Export</span>
                             </button>
                         </div>
                     </div>

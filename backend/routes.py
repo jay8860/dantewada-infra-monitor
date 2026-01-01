@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Response, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from typing import List, Optional
@@ -349,6 +350,53 @@ async def get_works(
                 query = query.order_by(col.asc())
     
     return query.offset(skip).limit(limit).all()
+
+@router.get("/works/export")
+async def export_works(
+    department: Optional[List[str]] = Query(None), 
+    block: Optional[List[str]] = Query(None),
+    panchayat: Optional[List[str]] = Query(None),
+    status: Optional[List[str]] = Query(None),
+    agency: Optional[List[str]] = Query(None),
+    year: Optional[List[str]] = Query(None),
+    search: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    query = build_works_query(db, department, block, panchayat, status, agency, year, search)
+    results = query.all()
+    
+    # Convert manually to avoid pandas overhead? No, pandas is safer for Excel
+    data = []
+    for r in results:
+        data.append({
+            "Work Code": r.work_code,
+            "Work Name": r.work_name,
+            "Department": r.department,
+            "Type": r.financial_year, # Column 2 is Financial Year mostly
+            "Location": r.panchayat, # Strict
+            "Block": r.block,
+            "Sanctioned Amount": r.sanctioned_amount,
+            "Sanctioned Date": r.sanctioned_date,
+            "Status": r.current_status,
+            "Agency": r.agency_name,
+            "Released": r.total_released_amount,
+            "Pending": r.amount_pending,
+            "Est End Date": r.probable_completion_date,
+            "Remark": r.remark
+        })
+    
+    df = pd.DataFrame(data)
+    
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Works')
+    output.seek(0)
+    
+    return StreamingResponse(
+        output, 
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+        headers={"Content-Disposition": f"attachment; filename=works_export_{datetime.now().strftime('%Y%m%d')}.xlsx"}
+    )
 
 
 @router.get("/works/{work_id}")
