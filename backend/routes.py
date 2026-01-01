@@ -258,28 +258,14 @@ async def get_work_locations(
         for r in results
     ]
 
-@router.get("/works")
-async def get_works(
-    response: Response,
-    department: Optional[List[str]] = Query(None), 
-    block: Optional[List[str]] = Query(None),
-    panchayat: Optional[List[str]] = Query(None),
-    status: Optional[List[str]] = Query(None),
-    agency: Optional[List[str]] = Query(None),
-    year: Optional[List[str]] = Query(None),
-    search: Optional[str] = None,
-    sort_by: Optional[str] = None,
-    sort_order: Optional[str] = "asc",
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
-):
+# --- Filter Helper ---
+def build_works_query(db, department, block, panchayat, status, agency, year, search):
     query = db.query(models.Work).options(joinedload(models.Work.assigned_officer))
     
     # helper for list filtering
     def apply_list_filter(q, col, values):
         if not values: return q
-        clean_values = [v for v in values if v]
+        clean_values = [str(v).strip() for v in values if v]
         if not clean_values: return q
         return q.filter(col.in_(clean_values))
 
@@ -322,6 +308,25 @@ async def get_works(
             models.Work.work_name.ilike(search_term),
             models.Work.work_code.ilike(search_term)
         ))
+    return query
+
+@router.get("/works")
+async def get_works(
+    response: Response,
+    department: Optional[List[str]] = Query(None), 
+    block: Optional[List[str]] = Query(None),
+    panchayat: Optional[List[str]] = Query(None),
+    status: Optional[List[str]] = Query(None),
+    agency: Optional[List[str]] = Query(None),
+    year: Optional[List[str]] = Query(None),
+    search: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "asc",
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    query = build_works_query(db, department, block, panchayat, status, agency, year, search)
         
     total_count = query.count()
     response.headers["X-Total-Count"] = str(total_count)
