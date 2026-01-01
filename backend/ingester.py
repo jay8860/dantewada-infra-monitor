@@ -107,24 +107,15 @@ def process_dataframe(df: pd.DataFrame, db: Session):
                  final_lat = existing_coords[work_code][0]
                  final_lng = existing_coords[work_code][1]
 
-            # 3. New Work / Missing Coords -> Try GP Cache or OSM
+            # 3. New Work / Missing Coords -> Try GP Cache (DB based only)
             if final_lat is None or final_lng is None:
                 gp_name = str(row.get('Panchayat') or row.get('Gram Panchayat') or row.get('panchayat') or '').strip()
                 blk_name = str(row.get('Block') or row.get('Block Name') or row.get('block') or '').strip()
                 
                 if gp_name and blk_name:
                     cache_key = f"{gp_name.upper()}_{blk_name.upper()}"
-                    
-                    # Try Cache
                     if cache_key in gp_coords_cache:
                         final_lat, final_lng = gp_coords_cache[cache_key]
-                    else:
-                        # Try OSM (fallback)
-                        print(f"Geocoding New Location: {gp_name}, {blk_name}")
-                        osm_lat, osm_lng = fetch_osm_coords(f"{gp_name}, {blk_name}, Dantewada, Chhattisgarh")
-                        if osm_lat:
-                            final_lat, final_lng = osm_lat, osm_lng
-                            gp_coords_cache[cache_key] = (final_lat, final_lng) # Update cache for this batch
 
             data = {
                'work_code': work_code, 
