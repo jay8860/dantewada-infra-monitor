@@ -67,12 +67,12 @@ const AdminDashboard = () => {
         sanctioned_amount: true,
         sanctioned_date: true,
         current_status: true,
-        agency_name: false,
-        financial_year: false,
-        total_released_amount: false,
-        amount_pending: false,
-        probable_completion_date: false,
-        remark: false,
+        agency_name: true,
+        financial_year: true,
+        total_released_amount: true,
+        amount_pending: true,
+        probable_completion_date: true,
+        remark: true,
         assignment: true // New default
     });
 
@@ -256,7 +256,7 @@ const AdminDashboard = () => {
             fetchWorks(); // Refresh list
         } catch (e) {
             console.error("Assignment failed", e);
-            alert("Failed to assign work");
+            alert(`Failed to assign work: ${e.response?.data?.detail || e.message}`);
         }
     };
 
