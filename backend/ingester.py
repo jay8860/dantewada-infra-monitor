@@ -175,7 +175,20 @@ def process_dataframe(df: pd.DataFrame, db: Session):
             
             gp_name = final_location_name
             
-            blk_name = str(row.get('Block') or row.get('Block Name') or row.get('block') or '').strip()
+            gp_name = final_location_name
+            
+            raw_blk = str(row.get('Block') or row.get('Block Name') or row.get('block') or '').strip()
+            # Normalize Block: UPPERCASE + Filter Junk
+            if raw_blk.lower() in ['nan', 'block name', 'block', '']:
+                blk_name = "District/Block Level Works" # Fallback or just empty? User wants 5 options. A lot of missing blocks imply district level.
+            else:
+                blk_name = raw_blk.upper()
+
+            # Additional check: If it's a District level work, force block to be clear? 
+            # Actually, "District/Block Level Works" is the fallback for GP. For Block column, we usually want the actual block.
+            # But if the Block column says "Block Name" (header artifact), we should skip it or default it.
+            if blk_name == "BLOCK NAME": 
+                 continue # Skip header row if it slipped through
             
             # Helper for Geocoding Logic (Internal use only, doesn't affect display name)
             is_block_level = (gp_name == level_raw.upper())
