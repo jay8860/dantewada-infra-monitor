@@ -269,11 +269,12 @@ const AdminDashboard = () => {
         if (!assignmentModal.workId || !assignmentModal.officerId) return;
 
         try {
-            const formData = new FormData();
-            formData.append('officer_id', assignmentModal.officerId);
-            if (assignmentModal.days) formData.append('deadline_days', assignmentModal.days);
+            const payload = {
+                officer_id: parseInt(assignmentModal.officerId),
+                deadline_days: assignmentModal.days ? parseInt(assignmentModal.days) : 7 // Default 7 if empty
+            };
 
-            await api.post(`/works/${assignmentModal.workId}/assign`, formData);
+            await api.post(`/works/${assignmentModal.workId}/assign`, payload);
             alert('Assignment successful!');
             setAssignmentModal({ isOpen: false, workId: null, officerId: '', days: '' });
             fetchWorks(); // Refresh list
@@ -430,7 +431,7 @@ const AdminDashboard = () => {
                             onChange={(e) => setFilters(p => ({ ...p, department: e.target.value }))}
                             className="text-sm border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[150px]"
                         >
-                            <option value="">All Depts</option>
+                            <option value="">All Sectors</option>
                             {filterOptions.departments.map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
 
@@ -565,7 +566,7 @@ const AdminDashboard = () => {
                                                 <th className="p-4 font-semibold text-gray-600">#</th>
                                                 {[
                                                     { key: 'work_name', label: 'Work Details' },
-                                                    { key: 'department', label: 'Department' },
+                                                    { key: 'department', label: 'Sector' },
                                                     { key: 'block', label: 'Location' },
                                                     { key: 'sanctioned_amount', label: 'Amount (Lakhs)' },
                                                     { key: 'sanctioned_date', label: 'Sanctioned Date' },

@@ -2,7 +2,7 @@
 import pandas as pd
 import os
 
-file_path = "../Cleaned_DMF_Works.xlsx"
+file_path = "Cleaned_DMF_Works.xlsx"
 try:
     df = pd.read_excel(file_path)
     print("Columns in file:", df.columns.tolist())

@@ -160,13 +160,9 @@ const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
                     <div>
                         <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">Basic Info</h4>
                         <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <p className="text-xs text-gray-400">Unique ID</p>
-                                <p className="text-sm font-medium">{displayWork.unique_id || '-'}</p>
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-400">Brief Name</p>
-                                <p className="text-sm font-medium">{displayWork.work_name_brief || '-'}</p>
+                            <div className="col-span-2">
+                                <p className="text-xs text-gray-400">Work Name</p>
+                                <p className="text-sm font-medium">{displayWork.work_name}</p>
                             </div>
                             <div>
                                 <p className="text-xs text-gray-400">Panchayat / Block</p>
@@ -176,20 +172,7 @@ const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
                                 <p className="text-xs text-gray-400">Financial Year</p>
                                 <p className="text-sm font-medium">{displayWork.financial_year}</p>
                             </div>
-                            <div>
-                                <p className="text-xs text-gray-400">Verified?</p>
-                                <p className="text-sm font-medium">{displayWork.verified_on_ground || '-'}</p>
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-400">Physical Progress</p>
-                                <p className="text-sm font-medium">{displayWork.work_percentage || '-'}</p>
-                            </div>
                         </div>
-                        {displayWork.csv_photo_info && (
-                            <p className="text-xs text-gray-500 mt-2 bg-yellow-50 p-2 rounded border border-yellow-100">
-                                <span className="font-semibold">Imported Photo Data:</span> {displayWork.csv_photo_info}
-                            </p>
-                        )}
                     </div>
 
                     <hr className="border-dashed" />
