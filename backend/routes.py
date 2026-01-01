@@ -64,6 +64,8 @@ async def upload_works(
         if current_user.role != "admin":
             raise HTTPException(status_code=403, detail="Only admin can upload works")
         
+        contents = await file.read()
+        
         # Validate format
         if file.filename.endswith('.csv'):
             df = pd.read_csv(BytesIO(contents))
