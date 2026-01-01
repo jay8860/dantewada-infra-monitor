@@ -64,7 +64,7 @@ async def upload_works(
         if current_user.role != "admin":
             raise HTTPException(status_code=403, detail="Only admin can upload works")
         
-        contents = await file.read()
+        # Validate format
         if file.filename.endswith('.csv'):
             df = pd.read_csv(BytesIO(contents))
         elif file.filename.endswith(('.xls', '.xlsx')):
@@ -72,114 +72,69 @@ async def upload_works(
         else:
             raise HTTPException(status_code=400, detail="Invalid file format")
             
-        # Normalize columns: strip whitespace
-        df.columns = df.columns.astype(str).str.strip()
+        # Use Ingestion Logic
+        import ingester
+        result = ingester.process_dataframe(df, db)
+        return {"message": f"Successfully processed {result['total_processed']} works (Inserted: {result['inserted']}, Updated: {result['updated']}, Errors: {result['errors']})"}
         
-        # 1. Fetch all existing work codes to minimize queries
-        all_existing_codes = {res[0] for res in db.query(models.Work.work_code).all()}
-        
-        to_insert = []
-        to_update = []
-        
-        # Track codes seen in this batch to handle duplicates within the file
-        seen_in_batch = set()
-
-        # Process DataFrame
-        for _, row in df.iterrows():
-             # Map "Work Id Number" or "work_code"
-            work_code = str(row.get('Work Id Number') or row.get('work_code') or '')
-            
-            # Basic validation
-            if not work_code or work_code.lower() == 'nan':
-                 work_code = str(row.get('UNIQ ID') or row.get('UNIQUE ID') or '')
-            
-            if (not work_code or work_code.lower() == 'nan') and row.get('AS Number'):
-                 as_num = str(row.get('AS Number'))
-                 if as_num.endswith('.0'):
-                     as_num = as_num[:-2]
-                 work_code = as_num
-
-            if not work_code or work_code.lower() == 'nan':
-                continue
-
-            if work_code.endswith('.0'):
-                work_code = work_code[:-2]
-
-            # Prevent duplicates within the same file (violates Unique constraint)
-            if work_code in seen_in_batch:
-                continue
-            seen_in_batch.add(work_code)
-
-            # Mapping Data
-            # Map Cleaned_DMF_Works headers
-            status_val = row.get('Work Status') or row.get('current_status') or 'Not Started'
-            if str(status_val).lower() == 'unstarted':
-                status_val = 'Not Started'
-            elif str(status_val).lower() == 'prossece': # Handle typo from user screenshot if exists? Or just keep as is
-                pass
-
-            data = {
-               'work_code': work_code, 
-               'department': row.get('Department') or row.get('SECTOR') or row.get('Sector') or row.get('department'),
-               'financial_year': str(row.get('Financial Year') or row.get('YEAR') or row.get('financial_year') or ''),
-               'block': row.get('Block') or row.get('Block Name') or row.get('block'),
-               'panchayat': row.get('Panchayat') or row.get('Gram Panchayat') or row.get('panchayat'),
-               'work_name': row.get('Work Name') or row.get('work name') or row.get('work_name'),
-               'work_name_brief': row.get('Work Name (in brief)'),
-               'unique_id': str(row.get('UNIQ ID') or row.get('UNIQUE ID') or ''),
-               'as_number': str(row.get('AS Number') or ''),
-               'sanctioned_amount': parse_float(row, 'Sanctioned Amount') if 'Sanctioned Amount' in row else (parse_float(row, 'AS Amount (in Rs)') if 'AS Amount (in Rs)' in row else parse_float(row, 'sanctioned_amount')),
-               'sanctioned_date': parse_date(row, 'Sanctioned Date') if 'Sanctioned Date' in row else (parse_date(row, 'AS Date') if 'AS Date' in row else parse_date(row, 'sanctioned_date')),
-               'tender_date': parse_date(row, 'Tender Date'),
-               'evaluation_amount': parse_float(row, 'Evaluation  Amount (in Rs)'),
-               'agency_release_details': row.get('Agencys Released Amount And Date'),
-               'total_released_amount': parse_float(row, 'Released Amount') if 'Released Amount' in row else parse_float(row, 'Total Released Amount'),
-               'amount_pending': parse_float(row, 'Pending Amount') if 'Pending Amount' in row else parse_float(row, 'Amount Pending as per AS'),
-               'agency_name': row.get('Agency') or row.get('Agency Name'),
-               'completion_timelimit_days': int(pd.to_numeric(row.get('Work Completion Timelimit as per AS (in days)'), errors='coerce') or 0) if pd.notna(pd.to_numeric(row.get('Work Completion Timelimit as per AS (in days)'), errors='coerce')) else 0,
-               'probable_completion_date': parse_date(row, 'Probable End Date') if 'Probable End Date' in row else parse_date(row, 'Probable Date of Completion (संभावित पूर्णता तिथि)'),
-               'current_status': status_val,
-               'work_percentage': str(row.get('Work %') or ''),
-               'verified_on_ground': row.get('Work Verified on ground?'),
-               'inspection_date': parse_date(row, 'Date of Inspection'),
-               'remark': row.get('Remark'),
-               'csv_photo_info': str(row.get('Photo with Date') or ''), 
-               'latitude': float(row.get('Latitude')) if 'Latitude' in row and pd.notna(row.get('Latitude')) else (float(row.get('latitude')) if 'latitude' in row and pd.notna(row.get('latitude')) else None),
-               'longitude': float(row.get('Longitude')) if 'Longitude' in row and pd.notna(row.get('Longitude')) else (float(row.get('longitude')) if 'longitude' in row and pd.notna(row.get('longitude')) else None)
-            }
-
-            if work_code in all_existing_codes:
-                to_update.append(data)
-            else:
-                to_insert.append(data)
-        
-        # 2. Bulk Insert
-        if to_insert:
-            db.bulk_insert_mappings(models.Work, to_insert)
-            
-        # 3. Bulk Update (Optimization)
-        # SQLAlchemy bulk_update_mappings requires Primary Key 'id' to be in the dict.
-        # We only have 'work_code'.
-        # Efficient Strategy: Fetch {work_code: id} mapping for all existing items.
-        
-        if to_update:
-            code_to_id = {w.work_code: w.id for w in db.query(models.Work.id, models.Work.work_code).all()}
-            
-            final_updates = []
-            for item in to_update:
-                if item['work_code'] in code_to_id:
-                    item['id'] = code_to_id[item['work_code']]
-                    final_updates.append(item)
-            
-            if final_updates:
-                 db.bulk_update_mappings(models.Work, final_updates)
-
-        db.commit()
-        return {"message": f"Successfully processed {len(df)} works (Inserted: {len(to_insert)}, Updated: {len(to_update)})"}
     except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+# --- Google Sheet Sync ---
+@router.post("/works/sync-sheet")
+async def sync_google_sheet(
+    sheet_url: str = Form(...),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Syncs data from a Google Sheet. 
+    Expects a standard Google Sheet URL.
+    Url must be accessible (e.g. 'Anyone with link can view' is easiest).
+    """
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can sync data")
+
+    try:
+        # 1. Parse URL to get Sheet ID
+        # Format: https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit...
+        import re
+        match = re.search(r"/d/([a-zA-Z0-9-_]+)", sheet_url)
+        if not match:
+            raise HTTPException(status_code=400, detail="Invalid Google Sheet URL")
+        
+        sheet_id = match.group(1)
+        
+        # 2. Construct CSV Export URL for specific sheet
+        # User requested sheet name: "Work progress (Approved AS works)"
+        # We need to URL encode the sheet name.
+        sheet_name = "Work progress (Approved AS works)"
+        import urllib.parse
+        encoded_sheet_name = urllib.parse.quote(sheet_name)
+        
+        csv_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={encoded_sheet_name}"
+        
+        print(f"Fetching Google Sheet CSV from: {csv_url}")
+        
+        # 3. Fetch Data using Pandas
+        # on_bad_lines='skip' helps with robustness
+        df = pd.read_csv(csv_url, on_bad_lines='skip')
+        
+        if df.empty:
+             raise HTTPException(status_code=400, detail="Sheet was empty or could not be read. Check permissions.")
+
+        # 4. Ingest
+        import ingester
+        result = ingester.process_dataframe(df, db)
+        
+        return {"message": f"Sync Complete. Processed {result['total_processed']} rows (Inserted: {result['inserted']}, Updated: {result['updated']})"}
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
 
 @router.get("/works/stats")
 async def get_work_stats(db: Session = Depends(get_db)):

@@ -39,6 +39,11 @@ const AdminDashboard = () => {
     const [file, setFile] = useState(null);
     const [showColumnMenu, setShowColumnMenu] = useState(false);
 
+    // --- State: Sync ---
+    const [syncModalOpen, setSyncModalOpen] = useState(false);
+    const [sheetUrl, setSheetUrl] = useState('');
+    const [syncing, setSyncing] = useState(false);
+
     // --- State: Filters, Sort & Pagination ---
     const [filters, setFilters] = useState({
         block: '',
@@ -233,9 +238,27 @@ const AdminDashboard = () => {
             fetchGlobalData();
         } catch (error) {
             console.error("Upload failed", error);
-            alert(`Upload Failed: ${error.message}`);
         }
     }
+
+    const handleSyncSheet = async () => {
+        if (!sheetUrl) return;
+        setSyncing(true);
+        try {
+            const formData = new FormData();
+            formData.append('sheet_url', sheetUrl);
+            const res = await api.post('/works/sync-sheet', formData);
+            alert(res.data.message);
+            setSyncModalOpen(false);
+            setSheetUrl('');
+            fetchWorks();
+        } catch (error) {
+            console.error("Sync failed", error);
+            alert(`Sync Failed: ${error.response?.data?.detail || error.message}`);
+        } finally {
+            setSyncing(false);
+        }
+    };
 
 
     const handleAssignClick = (work) => {
@@ -467,6 +490,16 @@ const AdminDashboard = () => {
                                 />
                             </label>
                         </div>
+
+                        {/* Google Sheet Sync */}
+                        <div className="relative group">
+                            <button
+                                onClick={() => setSyncModalOpen(true)}
+                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition whitespace-nowrap"
+                            >
+                                <ArrowUpDown size={16} /> <span className="hidden sm:inline">Sync GSheet</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -474,6 +507,42 @@ const AdminDashboard = () => {
                     {(loading || mapLoading) && (
                         <div className="absolute inset-0 bg-white/50 z-20 flex items-center justify-center">
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                        </div>
+                    )}
+
+                    {/* Sync Modal */}
+                    {syncModalOpen && (
+                        <div className="fixed inset-0 bg-black/50 z-[2000] flex items-center justify-center p-4">
+                            <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+                                <h3 className="text-lg font-bold mb-2">Sync with Google Sheet</h3>
+                                <p className="text-xs text-gray-500 mb-4">
+                                    Enter the Google Sheet URL. Ensure the sheet "Work progress (Approved AS works)" exists and is viewable by anyone with the link (or public).
+                                </p>
+
+                                <input
+                                    type="text"
+                                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                                    className="w-full border rounded-lg p-2 text-sm mb-4"
+                                    value={sheetUrl}
+                                    onChange={(e) => setSheetUrl(e.target.value)}
+                                />
+
+                                <div className="flex gap-3 justify-end">
+                                    <button
+                                        onClick={() => setSyncModalOpen(false)}
+                                        className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-100 rounded-lg text-sm"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleSyncSheet}
+                                        disabled={!sheetUrl || syncing}
+                                        className="px-4 py-2 bg-green-600 text-white font-medium rounded-lg text-sm hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+                                    >
+                                        {syncing ? 'Syncing...' : 'Sync Now'}
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     )}
 
@@ -639,7 +708,7 @@ const AdminDashboard = () => {
                         </div>
                     )}
                 </div>
-            </main>
+            </main >
 
             <WorkDetailDrawer
                 work={selectedWork}
@@ -648,57 +717,59 @@ const AdminDashboard = () => {
             />
 
             {/* Assignment Modal */}
-            {assignmentModal.isOpen && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
-                        <h3 className="text-lg font-bold mb-4">Assign Inspection</h3>
+            {
+                assignmentModal.isOpen && (
+                    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                        <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
+                            <h3 className="text-lg font-bold mb-4">Assign Inspection</h3>
 
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Select Officer</label>
-                                <select
-                                    className="w-full border rounded-lg p-2 text-sm"
-                                    value={assignmentModal.officerId}
-                                    onChange={(e) => setAssignmentModal(prev => ({ ...prev, officerId: e.target.value }))}
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Select Officer</label>
+                                    <select
+                                        className="w-full border rounded-lg p-2 text-sm"
+                                        value={assignmentModal.officerId}
+                                        onChange={(e) => setAssignmentModal(prev => ({ ...prev, officerId: e.target.value }))}
+                                    >
+                                        <option value="">-- Choose Officer --</option>
+                                        {officers.map(off => (
+                                            <option key={off.id} value={off.id}>{off.username} ({off.department || 'General'})</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Deadline (Days from now)</label>
+                                    <input
+                                        type="number"
+                                        placeholder="e.g. 7 (Leave empty for none)"
+                                        className="w-full border rounded-lg p-2 text-sm"
+                                        value={assignmentModal.days}
+                                        onChange={(e) => setAssignmentModal(prev => ({ ...prev, days: e.target.value }))}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="mt-6 flex gap-3 justify-end">
+                                <button
+                                    onClick={() => setAssignmentModal({ isOpen: false, workId: null, officerId: '', days: '' })}
+                                    className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-100 rounded-lg text-sm"
                                 >
-                                    <option value="">-- Choose Officer --</option>
-                                    {officers.map(off => (
-                                        <option key={off.id} value={off.id}>{off.username} ({off.department || 'General'})</option>
-                                    ))}
-                                </select>
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={submitAssignment}
+                                    disabled={!assignmentModal.officerId}
+                                    className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+                                >
+                                    Assign
+                                </button>
                             </div>
-
-                            <div>
-                                <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Deadline (Days from now)</label>
-                                <input
-                                    type="number"
-                                    placeholder="e.g. 7 (Leave empty for none)"
-                                    className="w-full border rounded-lg p-2 text-sm"
-                                    value={assignmentModal.days}
-                                    onChange={(e) => setAssignmentModal(prev => ({ ...prev, days: e.target.value }))}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="mt-6 flex gap-3 justify-end">
-                            <button
-                                onClick={() => setAssignmentModal({ isOpen: false, workId: null, officerId: '', days: '' })}
-                                className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-100 rounded-lg text-sm"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={submitAssignment}
-                                disabled={!assignmentModal.officerId}
-                                className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
-                            >
-                                Assign
-                            </button>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 };
 
