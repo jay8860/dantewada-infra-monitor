@@ -52,7 +52,8 @@ const OfficerDashboard = () => {
 
             // Filter for 'My Assignments'
             if (user?.id) {
-                const myTasks = data.filter(w => w.assigned_officer_id === user.id);
+                // Use loose equality (==) as IDs might differ in type (string vs number)
+                const myTasks = data.filter(w => w.assigned_officer_id == user.id);
                 setAssignedWorks(myTasks);
             }
         } catch (error) {
@@ -138,6 +139,7 @@ const OfficerDashboard = () => {
         formData.append('latitude', location?.latitude || 0);
         formData.append('longitude', location?.longitude || 0);
         formData.append('photos', photo);
+        formData.append('remarks', ""); // Ensure remarks is sent
         formData.append('work_id', selectedWork.id);
 
         try {
@@ -173,13 +175,18 @@ const OfficerDashboard = () => {
 
         setSubmitting(true);
         let successCount = 0;
+        let errors = [];
 
         for (const item of pending) {
             const formData = new FormData();
             formData.append('status', item.status);
             formData.append('latitude', item.latitude);
             formData.append('longitude', item.longitude);
-            formData.append('photos', item.photoBlob, `offline_${item.workId}.jpg`);
+            // Append photo with filename
+            if (item.photoBlob) {
+                formData.append('photos', item.photoBlob, `offline_${item.workId}_${Date.now()}.jpg`);
+            }
+            formData.append('remarks', item.remarks || "");
             formData.append('work_id', item.workId);
 
             try {
@@ -190,9 +197,16 @@ const OfficerDashboard = () => {
                 successCount++;
             } catch (err) {
                 console.error("Sync failed for item", item.id, err);
+                errors.push(`ID ${item.workId}: ${err.response?.data?.detail || err.message}`);
             }
         }
-        alert(`Synced ${successCount} of ${pending.length} updates.`);
+
+        let msg = `Synced ${successCount} of ${pending.length} updates.`;
+        if (errors.length > 0) {
+            msg += `\nErrors:\n${errors.join('\n')}`;
+        }
+        alert(msg);
+
         checkPending();
         fetchWorks();
         setSubmitting(false);
@@ -365,8 +379,8 @@ const OfficerDashboard = () => {
                                                     </td>
                                                     <td className="px-4 py-3">
                                                         <span className={`inline-flex px-2 py-1 rounded text-xs font-bold uppercase ${work.current_status === 'Completed' ? 'bg-green-100 text-green-700' :
-                                                                work.current_status === 'In Progress' ? 'bg-yellow-100 text-yellow-700' :
-                                                                    'bg-gray-100 text-gray-600'
+                                                            work.current_status === 'In Progress' ? 'bg-yellow-100 text-yellow-700' :
+                                                                'bg-gray-100 text-gray-600'
                                                             }`}>
                                                             {work.current_status}
                                                         </span>
