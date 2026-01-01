@@ -59,13 +59,27 @@ def process_dataframe(df: pd.DataFrame, db: Session):
         all_existing_codes.add(wc)
         existing_coords[wc] = (w.latitude, w.longitude)
     
-    # Build GP Cache from DB to avoid API calls
+    # Load Static GP Cache (Fallback)
+    static_gp_cache = {}
+    try:
+        import json
+        import os
+        json_path = os.path.join(os.path.dirname(__file__), 'gp_coordinates.json')
+        if os.path.exists(json_path):
+            with open(json_path, 'r') as f:
+                static_gp_cache = json.load(f)
+            print(f"Loaded {len(static_gp_cache)} static GP coordinates.")
+    except Exception as e:
+        print(f"Failed to load gp_coordinates.json: {e}")
+
+    # Build GP Cache from DB to avoid API calls (Merge with Static)
     # Map "GP_BLOCK" -> (lat, lng)
-    gp_coords_cache = {}
+    gp_coords_cache = static_gp_cache.copy() # Start with static
     for w in existing_works:
         if w.latitude and w.longitude and w.panchayat and w.block:
             key = f"{str(w.panchayat).strip().upper()}_{str(w.block).strip().upper()}"
-            gp_coords_cache[key] = (w.latitude, w.longitude)
+            if key not in gp_coords_cache:
+                gp_coords_cache[key] = (w.latitude, w.longitude)
 
     to_insert = []
     to_update = []
@@ -111,9 +125,22 @@ def process_dataframe(df: pd.DataFrame, db: Session):
             if str(status_val).lower() == 'prossece': status_val = 'In Progress' 
 
             # Coordinate Logic: New > Existing > None
-            new_lat = float(row.get('Latitude')) if 'Latitude' in row and pd.notna(row.get('Latitude')) else (float(row.get('latitude')) if 'latitude' in row and pd.notna(row.get('latitude')) else None)
-            new_lng = float(row.get('Longitude')) if 'Longitude' in row and pd.notna(row.get('Longitude')) else (float(row.get('longitude')) if 'longitude' in row and pd.notna(row.get('longitude')) else None)
+            # Check multiple casing for Lat/Lng
+            lat_keys = ['Latitude', 'latitude', 'Lat', 'lat', 'LATITUDE']
+            lng_keys = ['Longitude', 'longitude', 'Long', 'long', 'LONGITUDE']
             
+            new_lat, new_lng = None, None
+            for k in lat_keys:
+                if k in row and pd.notna(row[k]):
+                     try: new_lat = float(row[k])
+                     except: pass
+                     break
+            for k in lng_keys:
+                if k in row and pd.notna(row[k]):
+                     try: new_lng = float(row[k])
+                     except: pass
+                     break
+
             final_lat = new_lat
             final_lng = new_lng
             
@@ -131,23 +158,25 @@ def process_dataframe(df: pd.DataFrame, db: Session):
             level_type = str(level_raw).strip() if pd.notna(level_raw) else ''
 
             if final_lat is None or final_lng is None:
-                # A. Try GP Cache (DB based)
+                # A. Try GP Cache (DB + Static)
                 if gp_name and blk_name and gp_name.lower() != 'nan':
                     cache_key = f"{gp_name.upper()}_{blk_name.upper()}"
                     if cache_key in gp_coords_cache:
                         final_lat, final_lng = gp_coords_cache[cache_key]
                 
                 # B. Try Block Center (If GP missing or Cache miss, AND level implies Block/District)
-                if (final_lat is None) and blk_name:
-                    # Check if it's explicitly a Block/District level work OR simply missing GP
-                    # Level column populated means Block Level. Empty means GP (as per user).
-                    is_block_level = (bool(level_type) and level_type.lower() != 'nan') or (not gp_name) or (gp_name.lower() == 'nan')
-                    
-                    if is_block_level and blk_name.upper() in BLOCK_CENTERS:
+                # Check if it's explicitly a Block/District level work OR simply missing GP
+                # Level column populated means Block Level. Empty means GP (as per user).
+                is_block_level = (bool(level_type) and level_type.lower() != 'nan') or (not gp_name) or (gp_name.lower() == 'nan')
+                
+                # Force "Block Level" naming if it is block level to ensure Red Pin
+                if is_block_level:
+                    if not gp_name or gp_name.lower() == 'nan' or 'block' in level_type.lower() or 'district' in level_type.lower():
+                         gp_name = f"Block Level Work" # Standardize name for Frontend Cluster Logic
+
+                if (final_lat is None) and blk_name and is_block_level:
+                    if blk_name.upper() in BLOCK_CENTERS:
                         final_lat, final_lng = BLOCK_CENTERS[blk_name.upper()]
-                        # Ensure we flag this for the frontend Red Pin (by setting Panchayat special string?)
-                        if not gp_name or gp_name.lower() == 'nan':
-                            gp_name = "Block Level" 
 
             data = {
                'work_code': work_code, 
