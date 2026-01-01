@@ -387,11 +387,14 @@ async def get_work_timeline(
         })
     return timeline
 
+class AssignRequest(BaseModel):
+    officer_id: int
+    deadline_days: Optional[int] = None
+
 @router.post("/works/{work_id}/assign")
 async def assign_work(
     work_id: int,
-    officer_id: int = Form(...),
-    deadline_days: Optional[int] = Form(None),
+    payload: AssignRequest,
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -402,15 +405,15 @@ async def assign_work(
     if not work:
         raise HTTPException(status_code=404, detail="Work not found")
         
-    officer = db.query(models.User).filter(models.User.id == officer_id, models.User.role == "officer").first()
+    officer = db.query(models.User).filter(models.User.id == payload.officer_id, models.User.role == "officer").first()
     if not officer:
         raise HTTPException(status_code=404, detail="Officer not found")
         
-    work.assigned_officer_id = officer_id
+    work.assigned_officer_id = payload.officer_id
     work.assignment_status = "Pending"
     
-    if deadline_days:
-        work.inspection_deadline = datetime.utcnow() + datetime.timedelta(days=deadline_days)
+    if payload.deadline_days:
+        work.inspection_deadline = datetime.utcnow() + timedelta(days=payload.deadline_days)
     else:
         work.inspection_deadline = None # Or default?
         
