@@ -149,37 +149,35 @@ def process_dataframe(df: pd.DataFrame, db: Session):
                  final_lat = existing_coords[work_code][0]
                  final_lng = existing_coords[work_code][1]
 
-            # 3. Geocoding Fallback
+            # 4. Naming & Type Logic (Apply to ALL rows, even if coords exist)
             gp_name = str(row.get('Panchayat') or row.get('Gram Panchayat') or row.get('panchayat') or '').strip()
             blk_name = str(row.get('Block') or row.get('Block Name') or row.get('block') or '').strip()
-            
-            # New field for District/Block Level
             level_raw = row.get('District/Block level')
             level_type = str(level_raw).strip() if pd.notna(level_raw) else ''
 
+            # Logic to detect Block/District level works
+            is_block_level = (bool(level_type) and level_type.lower() != 'nan') or (not gp_name) or (gp_name.lower() == 'nan')
+
+            if is_block_level:
+                 # Check strict "nan" string to avoid overwriting valid GPs (if any logic leaked)
+                 if not gp_name or gp_name.lower() == 'nan' or 'block' in level_type.lower() or 'district' in level_type.lower():
+                     if 'district' in level_type.lower():
+                         gp_name = "District Level Work"
+                     elif 'block' in level_type.lower():
+                         gp_name = "Block Level Work"
+                     else:
+                         gp_name = "Block Level Work"
+
+            # 5. Geocoding Fallback (Only if coords missing)
             if final_lat is None or final_lng is None:
                 # A. Try GP Cache (DB + Static)
-                if gp_name and blk_name and gp_name.lower() != 'nan':
-                    cache_key = f"{gp_name.upper()}_{blk_name.upper()}"
-                    if cache_key in gp_coords_cache:
+                if gp_name and blk_name and gp_name != "Block Level Work" and gp_name != "District Level Work" and gp_name.lower() != 'nan':
+                     # ... cache lookup ...
+                     cache_key = f"{gp_name.upper()}_{blk_name.upper()}"
+                     if cache_key in gp_coords_cache:
                         final_lat, final_lng = gp_coords_cache[cache_key]
-                
-                # B. Try Block Center (If GP missing or Cache miss, AND level implies Block/District)
-                # Check if it's explicitly a Block/District level work OR simply missing GP
-                # Level column populated means Block Level. Empty means GP (as per user).
-                is_block_level = (bool(level_type) and level_type.lower() != 'nan') or (not gp_name) or (gp_name.lower() == 'nan')
-                
-                # Force "Block Level" or "District Level" naming based on the column
-                if is_block_level:
-                    if not gp_name or gp_name.lower() == 'nan' or 'block' in level_type.lower() or 'district' in level_type.lower():
-                         if 'district' in level_type.lower():
-                             gp_name = "District Level Work"
-                         elif 'block' in level_type.lower():
-                             gp_name = "Block Level Work"
-                         else:
-                             # Default fallback if column is empty but GP is missing
-                             gp_name = "Block Level Work"
 
+                # B. Try Block Center (If Block Level)
                 if (final_lat is None) and blk_name and is_block_level:
                     if blk_name.upper() in BLOCK_CENTERS:
                         final_lat, final_lng = BLOCK_CENTERS[blk_name.upper()]
