@@ -116,10 +116,15 @@ async def sync_google_sheet(
 async def get_work_stats(db: Session = Depends(get_db)):
     # Group by status
     from sqlalchemy import func
-    stats_query = db.query(models.Work.current_status, func.count(models.Work.id)).group_by(models.Work.current_status).all()
+    stats_query = db.query(models.Work.current_status, func.count(models.Work.id)).filter(models.Work.current_status != None).group_by(models.Work.current_status).all()
     stats = {status: count for status, count in stats_query}
     
-    total = sum(stats.values())
+    total = db.query(models.Work).count()
+    completed = stats.get('Completed', 0)
+    cancelled = stats.get('Cancelled', 0) # Assumes 'Cancelled' is the exact string
+    
+    # User Request: Ongoing = Total - Completed - Cancelled (effectively "Active")
+    in_progress = total - completed - cancelled
     
     # Last Sync Time
     last_sync_meta = db.query(models.SystemMetadata).filter(models.SystemMetadata.key == "last_sync_time").first()
@@ -127,9 +132,10 @@ async def get_work_stats(db: Session = Depends(get_db)):
 
     return {
         "total": total,
-        "completed": stats.get('Completed', 0),
-        "in_progress": stats.get('In Progress', 0),
+        "completed": completed,
+        "in_progress": in_progress, # Now effectively "Active" (Ongoing)
         "not_started": stats.get('Not Started', 0),
+        "cancelled": cancelled,
         "halted": stats.get('Halted', 0),
         "last_sync": last_sync
     }
@@ -153,12 +159,12 @@ async def get_work_filters(db: Session = Depends(get_db)):
 
 @router.get("/works/locations")
 async def get_work_locations(
-    department: Optional[str] = None, 
-    block: Optional[str] = None,
-    panchayat: Optional[str] = None,
-    status: Optional[str] = None,
-    agency: Optional[str] = None,
-    year: Optional[str] = None,
+    department: Optional[List[str]] = Query(None), 
+    block: Optional[List[str]] = Query(None),
+    panchayat: Optional[List[str]] = Query(None),
+    status: Optional[List[str]] = Query(None),
+    agency: Optional[List[str]] = Query(None),
+    year: Optional[List[str]] = Query(None),
     search: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
@@ -171,29 +177,53 @@ async def get_work_locations(
         models.Work.work_code,
         models.Work.department,
         models.Work.block,
-        models.Work.block,
         models.Work.panchayat,
         models.Work.assigned_officer_id,
         models.Work.remark # Added for coloring logic
     )
     
-    # Apply Filters (Case Insensitive for string fields if needed, but usually exact match from dropdowns is fine if dropdowns are normalized? 
-    # Actually, if dropdown says "Katekalyan" but DB has "KATEKALYAN", exact match fails.
-    # We should use ILIKE for text filters to be safe.)
-    
-    if department:
-        query = query.filter(models.Work.department.ilike(department))
+    # helper for list filtering
+    def apply_list_filter(q, col, values):
+        if not values: return q
+        # Handle cases where value might be empty string
+        clean_values = [v for v in values if v]
+        if not clean_values: return q
+        return q.filter(col.in_(clean_values))
+
+    query = apply_list_filter(query, models.Work.department, department)
+    query = apply_list_filter(query, models.Work.panchayat, panchayat)
+    query = apply_list_filter(query, models.Work.financial_year, year)
+    query = apply_list_filter(query, models.Work.agency_name, agency)
+    query = apply_list_filter(query, models.Work.current_status, status)
+
+    # Special Block Logic
     if block:
-        query = query.filter(models.Work.block.ilike(block))
-    if panchayat:
-        query = query.filter(models.Work.panchayat.ilike(panchayat))
-    if status:
-        query = query.filter(models.Work.current_status.ilike(status))
-    if agency:
-        query = query.filter(models.Work.agency_name.ilike(agency))
-    if year:
-        query = query.filter(models.Work.financial_year == year)
+        clean_blocks = [b for b in block if b]
+        if clean_blocks:
+            # Check for special "District/Block Level Works" flag
+            SPECIAL_FLAG = "District/Block Level Works"
+            if SPECIAL_FLAG in clean_blocks:
+                # Remove flag from standard block list
+                std_blocks = [b for b in clean_blocks if b != SPECIAL_FLAG]
+                
+                from sqlalchemy import or_
+                # Logic: (Block IN std_blocks) OR (Is District/Block Level Work)
+                # District/Block Level Works are identified by Panchayat name
+                block_cond = models.Work.block.in_(std_blocks) if std_blocks else None
+                special_cond = or_(
+                    models.Work.panchayat.ilike("Block Level%"),
+                    models.Work.panchayat.ilike("District Level%")
+                )
+                
+                if block_cond is not None:
+                     query = query.filter(or_(block_cond, special_cond))
+                else:
+                     query = query.filter(special_cond)
+            else:
+                query = query.filter(models.Work.block.in_(clean_blocks))
+
     if search:
+
         search_term = f"%{search}%"
         from sqlalchemy import or_
         query = query.filter(or_(
@@ -227,12 +257,12 @@ async def get_work_locations(
 @router.get("/works")
 async def get_works(
     response: Response,
-    department: Optional[str] = None, 
-    block: Optional[str] = None,
-    panchayat: Optional[str] = None,
-    status: Optional[str] = None,
-    agency: Optional[str] = None,
-    year: Optional[str] = None,
+    department: Optional[List[str]] = Query(None), 
+    block: Optional[List[str]] = Query(None),
+    panchayat: Optional[List[str]] = Query(None),
+    status: Optional[List[str]] = Query(None),
+    agency: Optional[List[str]] = Query(None),
+    year: Optional[List[str]] = Query(None),
     search: Optional[str] = None,
     sort_by: Optional[str] = None,
     sort_order: Optional[str] = "asc",
@@ -241,18 +271,45 @@ async def get_works(
     db: Session = Depends(get_db)
 ):
     query = db.query(models.Work).options(joinedload(models.Work.assigned_officer))
-    if department:
-        query = query.filter(models.Work.department.ilike(department))
+    
+    # helper for list filtering
+    def apply_list_filter(q, col, values):
+        if not values: return q
+        clean_values = [v for v in values if v]
+        if not clean_values: return q
+        return q.filter(col.in_(clean_values))
+
+    query = apply_list_filter(query, models.Work.department, department)
+    query = apply_list_filter(query, models.Work.panchayat, panchayat)
+    query = apply_list_filter(query, models.Work.financial_year, year)
+    query = apply_list_filter(query, models.Work.agency_name, agency)
+    query = apply_list_filter(query, models.Work.current_status, status)
+
+    # Special Block Logic
     if block:
-        query = query.filter(models.Work.block.ilike(block))
-    if panchayat:
-        query = query.filter(models.Work.panchayat.ilike(panchayat))
-    if status:
-        query = query.filter(models.Work.current_status.ilike(status))
-    if agency:
-        query = query.filter(models.Work.agency_name.ilike(agency))
-    if year:
-        query = query.filter(models.Work.financial_year == year)
+        clean_blocks = [b for b in block if b]
+        if clean_blocks:
+            # Check for special "District/Block Level Works" flag
+            SPECIAL_FLAG = "District/Block Level Works"
+            if SPECIAL_FLAG in clean_blocks:
+                # Remove flag from standard block list
+                std_blocks = [b for b in clean_blocks if b != SPECIAL_FLAG]
+                
+                from sqlalchemy import or_
+                # Logic: (Block IN std_blocks) OR (Is District/Block Level Work)
+                block_cond = models.Work.block.in_(std_blocks) if std_blocks else None
+                special_cond = or_(
+                    models.Work.panchayat.ilike("Block Level%"),
+                    models.Work.panchayat.ilike("District Level%")
+                )
+                
+                if block_cond is not None:
+                     query = query.filter(or_(block_cond, special_cond))
+                else:
+                     query = query.filter(special_cond)
+            else:
+                query = query.filter(models.Work.block.in_(clean_blocks))
+
     if search:
         search_term = f"%{search}%"
         # Search in work_name or work_code

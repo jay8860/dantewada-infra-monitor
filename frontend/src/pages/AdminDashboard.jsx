@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { LayoutDashboard, MapPin, Upload, LogOut, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import WorkDetailDrawer from '../components/WorkDetailDrawer';
+import MultiSelect from '../components/MultiSelect';
 
 // Debounce helper
 const useDebounce = (value, delay) => {
@@ -23,7 +24,7 @@ const AdminDashboard = () => {
     // --- State: Data ---
     const [works, setWorks] = useState([]);
     const [mapWorks, setMapWorks] = useState([]); // Decoupled map data (all points)
-    const [globalStats, setGlobalStats] = useState({ total: 0, completed: 0, in_progress: 0, not_started: 0 });
+    const [globalStats, setGlobalStats] = useState({ total: 0, completed: 0, in_progress: 0, not_started: 0, cancelled: 0 });
     const [filterOptions, setFilterOptions] = useState({ blocks: [], panchayats: [], departments: [], agencies: [], statuses: [], years: [] });
     const [officers, setOfficers] = useState([]);
 
@@ -46,87 +47,40 @@ const AdminDashboard = () => {
 
     // --- State: Filters, Sort & Pagination ---
     const [filters, setFilters] = useState({
-        block: '',
-        panchayat: '',
-        department: '',
-        status: '',
-        agency: '',
-        year: ''
+        block: [],
+        panchayat: [],
+        department: [],
+        status: [],
+        agency: [],
+        year: []
     });
-    const [searchTerm, setSearchTerm] = useState('');
-    const debouncedSearch = useDebounce(searchTerm, 500);
-
-    const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
-
-    const [pagination, setPagination] = useState({
-        page: 1,
-        limit: 100,
-        total: 0,
-        totalPages: 0
-    });
-
-    const [visibleColumns, setVisibleColumns] = useState({
-        work_name: true,
-        department: true,
-        block: true,
-        sanctioned_amount: true,
-        sanctioned_date: true,
-        current_status: true,
-        agency_name: true,
-        financial_year: true,
-        total_released_amount: true,
-        amount_pending: true,
-        probable_completion_date: true,
-        remark: true,
-        assignment: true // New default
-    });
-
-    // --- Fetch Global Data (Stats & Options) ---
-    useEffect(() => {
-        fetchGlobalData();
-        fetchOfficers();
-    }, []);
-
-    const fetchOfficers = async () => {
-        try {
-            const res = await api.get('/officers');
-            setOfficers(res.data);
-        } catch (e) { console.error("Failed to fetch officers", e); }
-    };
-
-    const fetchGlobalData = async () => {
-        try {
-            const [statsRes, filtersRes] = await Promise.all([
-                api.get('/works/stats'),
-                api.get('/works/filters')
-            ]);
-            setGlobalStats(statsRes.data);
-            setFilterOptions(filtersRes.data);
-        } catch (error) {
-            console.error("Failed to fetch global data", error);
-        }
-    };
 
     // --- Fetch TABLE Works (Paginated) ---
     const fetchWorks = useCallback(async () => {
         setLoading(true);
         try {
-            const params = {
-                skip: (pagination.page - 1) * pagination.limit,
-                limit: pagination.limit,
-                ...filters,
-            };
+            // Manual Params Serialization for FastAPI (block=A&block=B)
+            const params = new URLSearchParams();
 
-            if (debouncedSearch) params.search = debouncedSearch;
-            if (sortConfig.key) {
-                params.sort_by = sortConfig.key;
-                params.sort_order = sortConfig.direction;
-            }
+            // Pagination
+            params.append('skip', (pagination.page - 1) * pagination.limit);
+            params.append('limit', pagination.limit);
 
-            // Remove empty filters
-            Object.keys(params).forEach(key => {
-                if (params[key] === '' || params[key] === null) delete params[key];
+            // Filters
+            Object.keys(filters).forEach(key => {
+                const val = filters[key];
+                if (Array.isArray(val) && val.length > 0) {
+                    val.forEach(v => params.append(key, v));
+                } else if (val && !Array.isArray(val)) {
+                    params.append(key, val);
+                }
             });
+
+            if (debouncedSearch) params.append('search', debouncedSearch);
+            if (sortConfig.key) {
+                params.append('sort_by', sortConfig.key);
+                params.append('sort_order', sortConfig.direction);
+            }
 
             const response = await api.get('/works', { params });
             const totalCount = parseInt(response.headers['x-total-count'] || '0', 10);
@@ -147,18 +101,17 @@ const AdminDashboard = () => {
 
     // --- Fetch MAP Works (All Points) ---
     const fetchMapWorks = useCallback(async () => {
-        // Only fetch if in map mode
         if (viewMode !== 'map') return;
-
         setMapLoading(true);
         try {
-            const params = { ...filters };
-            if (debouncedSearch) params.search = debouncedSearch;
-
-            // Remove empty filters
-            Object.keys(params).forEach(key => {
-                if (params[key] === '' || params[key] === null) delete params[key];
+            const params = new URLSearchParams();
+            Object.keys(filters).forEach(key => {
+                const val = filters[key];
+                if (Array.isArray(val) && val.length > 0) {
+                    val.forEach(v => params.append(key, v));
+                }
             });
+            if (debouncedSearch) params.append('search', debouncedSearch);
 
             const response = await api.get('/works/locations', { params });
             setMapWorks(response.data);
@@ -169,19 +122,57 @@ const AdminDashboard = () => {
         }
     }, [viewMode, filters, debouncedSearch]);
 
-    // Effects
+    // ...
+
+    // Inject "District/Block Level Works" into Blocks
+    const blockOptions = useMemo(() => {
+        const base = filterOptions.blocks || [];
+        if (!base.includes("District/Block Level Works")) {
+            return [...base, "District/Block Level Works"];
+        }
+        return base;
+    }, [filterOptions.blocks]);
+
+    // --- Effects: Initial Fetch ---
+    useEffect(() => {
+        const fetchGlobalData = async () => {
+            try {
+                const [statsRes, filtersRes] = await Promise.all([
+                    api.get('/works/stats'),
+                    api.get('/works/filters')
+                ]);
+                setGlobalStats(statsRes.data);
+                setFilterOptions(filtersRes.data);
+            } catch (error) {
+                console.error("Failed to fetch global data", error);
+            }
+        };
+
+        const fetchOfficers = async () => {
+            try {
+                const res = await api.get('/officers');
+                setOfficers(res.data);
+            } catch (e) { console.error("Failed to fetch officers", e); }
+        };
+
+        fetchGlobalData();
+        fetchOfficers();
+    }, []);
+
+    // Effects: Triggers
     useEffect(() => {
         fetchWorks();
-    }, [fetchWorks]); // Trigger table fetch
+    }, [fetchWorks]);
 
     useEffect(() => {
         fetchMapWorks();
-    }, [fetchMapWorks]); // Trigger map fetch
+    }, [fetchMapWorks]);
 
     // Reset Page on Filter Change
     useEffect(() => {
         setPagination(prev => ({ ...prev, page: 1 }));
     }, [filters, debouncedSearch]);
+
 
     // --- Handlers ---
     const handleSort = (key) => {
@@ -192,26 +183,15 @@ const AdminDashboard = () => {
     };
 
     const handleViewDetails = async (workOrId) => {
-        // If it's a lightweight map object, we might need to fetch details.
-        // But WorkDetailDrawer usually expects a full object or ID.
-        // Our API supports get /works/{id}.
-        // If passed object has 'id', use it.
         let workData = workOrId;
-
-        // If clicked from map, we might only have partial data.
-        // Map objects have 'title' property while full objects have 'work_name'.
-        // Also check if agency_name is missing (common missing field in map).
         if (workOrId.id && (workOrId.title || !workOrId.work_name || !workOrId.agency_name)) {
             try {
-                // FORCE Fetch full details
                 const res = await api.get(`/works/${workOrId.id}`);
                 workData = res.data;
             } catch (e) {
                 console.error("Failed to fetch details", e);
-                // Fallback: alert user or show what we have
             }
         }
-
         setSelectedWork(workData);
         setIsDrawerOpen(true);
     };
@@ -238,7 +218,6 @@ const AdminDashboard = () => {
             alert('File uploaded successfully');
             setFile(null);
             fetchWorks();
-            fetchGlobalData();
         } catch (error) {
             console.error("Upload failed", error);
         }
@@ -264,34 +243,24 @@ const AdminDashboard = () => {
         }
     };
 
-
     const handleAssignClick = (work) => {
         setAssignmentModal({ isOpen: true, workId: work.id, officerId: work.assigned_officer_id || '', days: '' });
     };
 
     const submitAssignment = async () => {
         if (!assignmentModal.workId || !assignmentModal.officerId) return;
-
         try {
-            const officerIdInt = parseInt(assignmentModal.officerId);
-            if (isNaN(officerIdInt)) {
-                alert("Invalid Officer ID selected.");
-                return;
-            }
-
             const payload = {
-                officer_id: officerIdInt,
+                officer_id: parseInt(assignmentModal.officerId),
                 deadline_days: assignmentModal.days ? parseInt(assignmentModal.days) : 7
             };
-            console.log("Submitting assignment payload:", payload);
-
             await api.post(`/works/${assignmentModal.workId}/assign`, payload);
             alert('Assignment successful!');
             setAssignmentModal({ isOpen: false, workId: null, officerId: '', days: '' });
-            fetchWorks(); // Refresh list
+            fetchWorks();
         } catch (e) {
             console.error("Assignment failed", e);
-            alert(`Failed to assign work: ${JSON.stringify(e.response?.data?.detail || e.message)}`);
+            alert(`Failed: ${e.response?.data?.detail || e.message}`);
         }
     };
 
@@ -299,66 +268,36 @@ const AdminDashboard = () => {
         setVisibleColumns(prev => ({ ...prev, [col]: !prev[col] }));
     };
 
-    // --- Render Pagination Controls ---
     const renderPagination = () => {
         if (pagination.totalPages <= 1) return null;
-
         let pages = [];
         const { page, totalPages } = pagination;
-
         if (totalPages <= 7) {
             pages = Array.from({ length: totalPages }, (_, i) => i + 1);
         } else {
-            if (page <= 4) {
-                pages = [1, 2, 3, 4, 5, '...', totalPages];
-            } else if (page >= totalPages - 3) {
-                pages = [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
-            } else {
-                pages = [1, '...', page - 1, page, page + 1, '...', totalPages];
-            }
+            if (page <= 4) pages = [1, 2, 3, 4, 5, '...', totalPages];
+            else if (page >= totalPages - 3) pages = [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+            else pages = [1, '...', page - 1, page, page + 1, '...', totalPages];
         }
-
         return (
             <div className="flex items-center justify-center gap-2 py-4">
-                <button
-                    onClick={() => handlePageChange(page - 1)}
-                    disabled={page === 1}
-                    className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30"
-                >
-                    <ChevronLeft size={16} />
-                </button>
-
+                <button onClick={() => handlePageChange(page - 1)} disabled={page === 1} className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30"><ChevronLeft size={16} /></button>
                 {pages.map((p, i) => (
-                    <button
-                        key={i}
-                        onClick={() => typeof p === 'number' && handlePageChange(p)}
-                        className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm font-medium transition
-                            ${p === page ? 'bg-blue-600 text-white' : 'hover:bg-gray-100 text-gray-600'}
-                            ${typeof p !== 'number' ? 'cursor-default' : ''}
-                        `}
-                        disabled={typeof p !== 'number'}
-                    >
-                        {p}
-                    </button>
+                    <button key={i} onClick={() => typeof p === 'number' && handlePageChange(p)} className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm font-medium transition ${p === page ? 'bg-blue-600 text-white' : 'hover:bg-gray-100 text-gray-600'} ${typeof p !== 'number' ? 'cursor-default' : ''}`} disabled={typeof p !== 'number'}>{p}</button>
                 ))}
-
-                <button
-                    onClick={() => handlePageChange(page + 1)}
-                    disabled={page === totalPages}
-                    className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30"
-                >
-                    <ChevronRight size={16} />
-                </button>
+                <button onClick={() => handlePageChange(page + 1)} disabled={page === totalPages} className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-30"><ChevronRight size={16} /></button>
             </div>
         );
     };
 
     return (
-        <div className="flex flex-col h-screen bg-gray-50 text-gray-800 font-sans">
-            {/* Header with Global Stats */}
             <header className="bg-white border-b sticky top-0 z-30 px-6 py-3 flex justify-between items-center shadow-sm">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center font-bold text-gray-500 text-xs">LOGOS</div>
+                    <img 
+                        src="https://dantewada.nic.in/wp-content/themes/district-theme-9/images/emblem-dark.png" 
+                        alt="Dantewada Emblem" 
+                        className="h-12 w-auto object-contain"
+                    />
                     <div>
                         <h1 className="text-lg font-bold text-gray-900 leading-tight">Dantewada Work Monitor</h1>
                         <p className="text-xs text-blue-600 font-medium tracking-wide">DISTRICT ADMINISTRATION</p>
@@ -376,7 +315,11 @@ const AdminDashboard = () => {
                         </div>
                         <div className="flex flex-col items-center">
                             <span className="font-bold text-yellow-600">{globalStats.in_progress?.toLocaleString() || 0}</span>
-                            <span className="text-[10px] text-gray-500 uppercase">Ongoing</span>
+                            <span className="text-[10px] text-gray-500 uppercase">Ongoing (Active)</span>
+                        </div>
+                        <div className="flex flex-col items-center">
+                            <span className="font-bold text-red-600">{globalStats.cancelled?.toLocaleString() || 0}</span>
+                            <span className="text-[10px] text-gray-500 uppercase">Cancelled</span>
                         </div>
                     </div>
                     <div className="h-8 w-px bg-gray-200"></div>
@@ -391,6 +334,7 @@ const AdminDashboard = () => {
                 <div className="bg-white p-4 border-b flex flex-col md:flex-row gap-4 justify-between items-center shadow-sm z-20">
                     <div className="flex gap-4 w-full md:w-auto">
                         <div className="bg-gray-100 p-1 rounded-lg flex">
+                             {/* ... buttons ... */}
                             <button
                                 onClick={() => setViewMode('table')}
                                 className={`px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition ${viewMode === 'table' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
@@ -419,50 +363,55 @@ const AdminDashboard = () => {
 
                     <div className="flex gap-3 w-full md:w-auto items-center flex-wrap pb-2 md:pb-0">
                         {/* Dynamic Filters */}
-                        <select
+                        <MultiSelect
+                            label="Block"
+                            placeholder="All Blocks"
+                            options={blockOptions}
                             value={filters.block}
-                            onChange={(e) => setFilters(p => ({ ...p, block: e.target.value }))}
-                            className="text-sm border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[150px]"
-                        >
-                            <option value="">All Blocks</option>
-                            {filterOptions.blocks.map(b => <option key={b} value={b}>{b}</option>)}
-                        </select>
+                            onChange={(val) => setFilters(p => ({ ...p, block: val }))}
+                        />
 
-                        <select
+                        <MultiSelect
+                            label="Panchayat"
+                            placeholder="All GPs"
+                            options={filterOptions.panchayats || []}
                             value={filters.panchayat}
-                            onChange={(e) => setFilters(p => ({ ...p, panchayat: e.target.value }))}
-                            className="text-sm border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[150px]"
-                        >
-                            <option value="">All GPs</option>
-                            {filterOptions.panchayats?.map(g => <option key={g} value={g}>{g}</option>)}
-                        </select>
+                            onChange={(val) => setFilters(p => ({ ...p, panchayat: val }))}
+                        />
 
-                        <select
+                        <MultiSelect
+                            label="Sector"
+                            placeholder="All Sectors"
+                            options={filterOptions.departments || []}
                             value={filters.department}
-                            onChange={(e) => setFilters(p => ({ ...p, department: e.target.value }))}
-                            className="text-sm border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[150px]"
-                        >
-                            <option value="">All Sectors</option>
-                            {filterOptions.departments.map(d => <option key={d} value={d}>{d}</option>)}
-                        </select>
+                            onChange={(val) => setFilters(p => ({ ...p, department: val }))}
+                        />
 
-                        <select
+                        <MultiSelect
+                            label="Agency"
+                            placeholder="All Agencies"
+                            options={filterOptions.agencies || []}
                             value={filters.agency}
-                            onChange={(e) => setFilters(p => ({ ...p, agency: e.target.value }))}
-                            className="text-sm border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[150px]"
-                        >
-                            <option value="">All Agencies</option>
-                            {filterOptions.agencies.map(a => <option key={a} value={a}>{a}</option>)}
-                        </select>
+                            onChange={(val) => setFilters(p => ({ ...p, agency: val }))}
+                        />
+                        
+                         <MultiSelect
+                            label="Financial Year"
+                            placeholder="All Years"
+                            options={filterOptions.years || []}
+                            value={filters.year}
+                            onChange={(val) => setFilters(p => ({ ...p, year: val }))}
+                        />
 
-                        <select
+                        <MultiSelect
+                            label="Status"
+                            placeholder="All Status"
+                            options={filterOptions.statuses || []}
                             value={filters.status}
-                            onChange={(e) => setFilters(p => ({ ...p, status: e.target.value }))}
-                            className="text-sm border rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="">All Status</option>
-                            {filterOptions.statuses.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
+                            onChange={(val) => setFilters(p => ({ ...p, status: val }))}
+                        />
+
+
 
                         {/* Column Toggle */}
                         <div className="relative">
@@ -751,59 +700,59 @@ const AdminDashboard = () => {
                 onClose={() => setIsDrawerOpen(false)}
             />
 
-            {/* Assignment Modal */}
-            {
-                assignmentModal.isOpen && (
-                    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                        <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
-                            <h3 className="text-lg font-bold mb-4">Assign Inspection</h3>
+    {/* Assignment Modal */ }
+    {
+        assignmentModal.isOpen && (
+            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
+                    <h3 className="text-lg font-bold mb-4">Assign Inspection</h3>
 
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Select Officer</label>
-                                    <select
-                                        className="w-full border rounded-lg p-2 text-sm"
-                                        value={assignmentModal.officerId}
-                                        onChange={(e) => setAssignmentModal(prev => ({ ...prev, officerId: e.target.value }))}
-                                    >
-                                        <option value="">-- Choose Officer --</option>
-                                        {officers.map(off => (
-                                            <option key={off.id} value={off.id}>{off.username} ({off.department || 'General'})</option>
-                                        ))}
-                                    </select>
-                                </div>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Select Officer</label>
+                            <select
+                                className="w-full border rounded-lg p-2 text-sm"
+                                value={assignmentModal.officerId}
+                                onChange={(e) => setAssignmentModal(prev => ({ ...prev, officerId: e.target.value }))}
+                            >
+                                <option value="">-- Choose Officer --</option>
+                                {officers.map(off => (
+                                    <option key={off.id} value={off.id}>{off.username} ({off.department || 'General'})</option>
+                                ))}
+                            </select>
+                        </div>
 
-                                <div>
-                                    <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Deadline (Days from now)</label>
-                                    <input
-                                        type="number"
-                                        placeholder="e.g. 7 (Leave empty for none)"
-                                        className="w-full border rounded-lg p-2 text-sm"
-                                        value={assignmentModal.days}
-                                        onChange={(e) => setAssignmentModal(prev => ({ ...prev, days: e.target.value }))}
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="mt-6 flex gap-3 justify-end">
-                                <button
-                                    onClick={() => setAssignmentModal({ isOpen: false, workId: null, officerId: '', days: '' })}
-                                    className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-100 rounded-lg text-sm"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={submitAssignment}
-                                    disabled={!assignmentModal.officerId}
-                                    className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
-                                >
-                                    Assign
-                                </button>
-                            </div>
+                        <div>
+                            <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Deadline (Days from now)</label>
+                            <input
+                                type="number"
+                                placeholder="e.g. 7 (Leave empty for none)"
+                                className="w-full border rounded-lg p-2 text-sm"
+                                value={assignmentModal.days}
+                                onChange={(e) => setAssignmentModal(prev => ({ ...prev, days: e.target.value }))}
+                            />
                         </div>
                     </div>
-                )
-            }
+
+                    <div className="mt-6 flex gap-3 justify-end">
+                        <button
+                            onClick={() => setAssignmentModal({ isOpen: false, workId: null, officerId: '', days: '' })}
+                            className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-100 rounded-lg text-sm"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={submitAssignment}
+                            disabled={!assignmentModal.officerId}
+                            className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+                        >
+                            Assign
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
+    }
         </div >
     );
 };
