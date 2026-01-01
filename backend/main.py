@@ -47,16 +47,37 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 @app.on_event("startup")
 def startup():
-    from database import engine, Base
-    Base.metadata.create_all(bind=engine)
-    # Auto-create admin if missing (Essential for ephemeral DBs like Railway SQLite)
-    import init_admin
-    init_admin.create_admin_if_missing()
-    
-    # Start Scheduler
-    scheduler.add_job(run_scheduled_sync, 'interval', hours=24)
-    scheduler.start()
-    logger.info("Scheduler started (Sync every 24h).")
+    try:
+        from database import engine, Base
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database initialized.")
+        
+        # Auto-create admin if missing
+        import init_admin
+        init_admin.create_admin_if_missing()
+        logger.info("Admin init check complete.")
+        
+        # Start Scheduler
+        scheduler.add_job(run_scheduled_sync, 'interval', hours=24)
+        scheduler.start()
+        logger.info("Scheduler started (Sync every 24h).")
+    except Exception as e:
+        logger.critical(f"CRITICAL STARTUP ERROR: {e}")
+        # We generally want to crash if startup fails, but for debugging 502s on Railway, we might want to stay up.
+        # However, without DB, app uses are limited. We'll just log loudly.
+
+@app.get("/api/debug")
+def debug_info():
+    import os
+    import glob
+    return {
+        "cwd": os.getcwd(),
+        "files_in_backend": glob.glob("*"),
+        "env": dict(os.environ),
+        "status": "Alive"
+    }
+
+from routes import router
 
 from routes import router
 app.include_router(router, prefix="/api")
