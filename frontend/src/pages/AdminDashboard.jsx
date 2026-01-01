@@ -501,7 +501,8 @@ const AdminDashboard = () => {
                         </div>
 
                         {/* Google Sheet Sync */}
-                        <div className="relative group">
+                        {/* Google Sheet Sync & Export */}
+                        <div className="flex gap-4 items-center">
                             <button
                                 onClick={() => setSyncModalOpen(true)}
                                 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition whitespace-nowrap"
