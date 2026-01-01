@@ -197,7 +197,7 @@ def process_dataframe(df: pd.DataFrame, db: Session):
             data = {
                'work_code': work_code, 
                'department': row.get('Department') or row.get('SECTOR') or row.get('Sector') or row.get('department'),
-               'financial_year': str(row.get('Financial Year') or row.get('YEAR') or row.get('Year') or row.get('financial_year') or row.get('FY') or row.get('F.Y.') or row.get('Fin Year') or ''),
+               'financial_year': str(row.get('Financial Year') or row.get('YEAR') or row.get('Year') or row.get('financial_year') or row.get('FY') or row.get('F.Y.') or row.get('Fin Year') or (row.iloc[1] if len(row) > 1 else '')),
                'block': blk_name,
                'panchayat': gp_name,
                'work_name': row.get('Work Name') or row.get('work name') or row.get('work_name'),

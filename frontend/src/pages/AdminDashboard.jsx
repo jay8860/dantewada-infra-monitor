@@ -5,7 +5,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { LayoutDashboard, MapPin, Upload, LogOut, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import WorkDetailDrawer from '../components/WorkDetailDrawer';
-import MultiSelect from '../components/MultiSelect';
 
 // Debounce helper
 const useDebounce = (value, delay) => {
@@ -42,7 +41,11 @@ const AdminDashboard = () => {
         agency_name: true,
         current_status: true,
         sanctioned_amount: true,
-        financial_year: false
+        sanctioned_date: true,
+        financial_year: true,
+        total_released_amount: true,
+        amount_pending: true,
+        probable_completion_date: false, // hidden by default to save space
     });
 
     // --- State: Assignment ---
@@ -64,12 +67,12 @@ const AdminDashboard = () => {
 
     // --- State: Filters ---
     const [filters, setFilters] = useState({
-        block: [],
-        panchayat: [],
-        department: [],
-        status: [],
-        agency: [],
-        year: []
+        block: '',
+        panchayat: '',
+        department: '',
+        status: '',
+        agency: '',
+        year: ''
     });
 
     // --- Fetch TABLE Works (Paginated) ---
@@ -84,13 +87,10 @@ const AdminDashboard = () => {
             params.append('limit', pagination.limit);
 
             // Filters
+            // Filters (Single Select)
             Object.keys(filters).forEach(key => {
                 const val = filters[key];
-                if (Array.isArray(val) && val.length > 0) {
-                    val.forEach(v => params.append(key, v));
-                } else if (val && !Array.isArray(val)) {
-                    params.append(key, val);
-                }
+                if (val) params.append(key, val);
             });
 
             if (debouncedSearch) params.append('search', debouncedSearch);
@@ -381,47 +381,51 @@ const AdminDashboard = () => {
 
                     <div className="flex gap-3 w-full md:w-auto items-center flex-wrap pb-2 md:pb-0">
                         {/* Dynamic Filters */}
-                        <MultiSelect
-                            label="Block"
-                            placeholder="All Blocks"
-                            options={blockOptions}
+                        {/* Single Select Filters */}
+                        <select
+                            className="bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-32"
                             value={filters.block}
-                            onChange={(val) => setFilters(p => ({ ...p, block: val }))}
-                        />
+                            onChange={(e) => setFilters(p => ({ ...p, block: e.target.value }))}
+                        >
+                            <option value="">All Blocks</option>
+                            {blockOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
 
-                        <MultiSelect
-                            label="Panchayat"
-                            placeholder="All GPs"
-                            options={filterOptions.panchayats || []}
+                        <select
+                            className="bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-32"
                             value={filters.panchayat}
-                            onChange={(val) => setFilters(p => ({ ...p, panchayat: val }))}
-                        />
+                            onChange={(e) => setFilters(p => ({ ...p, panchayat: e.target.value }))}
+                        >
+                            <option value="">All GPs</option>
+                            {filterOptions.panchayats.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
 
-                        <MultiSelect
-                            label="Sector"
-                            placeholder="All Sectors"
-                            options={filterOptions.departments || []}
+                        <select
+                            className="bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-32"
                             value={filters.department}
-                            onChange={(val) => setFilters(p => ({ ...p, department: val }))}
-                        />
+                            onChange={(e) => setFilters(p => ({ ...p, department: e.target.value }))}
+                        >
+                            <option value="">All Sectors</option>
+                            {filterOptions.departments.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
 
-                        <MultiSelect
-                            label="Agency"
-                            placeholder="All Agencies"
-                            options={filterOptions.agencies || []}
+                        <select
+                            className="bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-32"
                             value={filters.agency}
-                            onChange={(val) => setFilters(p => ({ ...p, agency: val }))}
-                        />
+                            onChange={(e) => setFilters(p => ({ ...p, agency: e.target.value }))}
+                        >
+                            <option value="">All Agencies</option>
+                            {filterOptions.agencies.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
 
-                        {/* MultiSelect for Financial Year REMOVED as per user request */}
-
-                        <MultiSelect
-                            label="Status"
-                            placeholder="All Status"
-                            options={filterOptions.statuses || []}
+                        <select
+                            className="bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-32"
                             value={filters.status}
-                            onChange={(val) => setFilters(p => ({ ...p, status: val }))}
-                        />
+                            onChange={(e) => setFilters(p => ({ ...p, status: e.target.value }))}
+                        >
+                            <option value="">All Status</option>
+                            {filterOptions.statuses.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
 
 
 
@@ -564,12 +568,12 @@ const AdminDashboard = () => {
                                                     { key: 'department', label: 'Sector' },
                                                     { key: 'block', label: 'Location' },
                                                     { key: 'sanctioned_amount', label: 'Amount (Lakhs)' },
-                                                    { key: 'sanctioned_date', label: 'Sanctioned Date' },
+                                                    { key: 'sanctioned_date', label: 'AS Date' },
                                                     { key: 'current_status', label: 'Status' },
                                                     { key: 'agency_name', label: 'Agency' },
                                                     { key: 'financial_year', label: 'FY' },
-                                                    { key: 'total_released_amount', label: 'Released' },
-                                                    { key: 'amount_pending', label: 'Pending' },
+                                                    { key: 'total_released_amount', label: 'Released (Lakhs)' },
+                                                    { key: 'amount_pending', label: 'Pending (Lakhs)' },
                                                     { key: 'probable_completion_date', label: 'Est. End' },
                                                     { key: 'remark', label: 'Remarks' },
                                                     { key: 'assignment', label: 'Inspection Status' },
