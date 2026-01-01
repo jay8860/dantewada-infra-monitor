@@ -28,6 +28,23 @@ const AdminDashboard = () => {
     const [filterOptions, setFilterOptions] = useState({ blocks: [], panchayats: [], departments: [], agencies: [], statuses: [], years: [] });
     const [officers, setOfficers] = useState([]);
 
+    // --- State: Search, Sort, Pagination ---
+    const [searchTerm, setSearchTerm] = useState('');
+    const debouncedSearch = useDebounce(searchTerm, 500);
+    const [sortConfig, setSortConfig] = useState({ key: '', direction: 'asc' });
+    const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 0 });
+    const [visibleColumns, setVisibleColumns] = useState({
+        work_code: true,
+        work_name: true,
+        panchayat: true,
+        block: true,
+        department: true,
+        agency_name: true,
+        current_status: true,
+        sanctioned_amount: true,
+        financial_year: false
+    });
+
     // --- State: Assignment ---
     const [assignmentModal, setAssignmentModal] = useState({ isOpen: false, workId: null, officerId: '', days: '' });
 
@@ -45,7 +62,7 @@ const AdminDashboard = () => {
     const [sheetUrl, setSheetUrl] = useState('');
     const [syncing, setSyncing] = useState(false);
 
-    // --- State: Filters, Sort & Pagination ---
+    // --- State: Filters ---
     const [filters, setFilters] = useState({
         block: [],
         panchayat: [],
