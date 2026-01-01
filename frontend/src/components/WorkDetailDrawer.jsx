@@ -164,6 +164,10 @@ const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
                                 <p className="text-xs text-gray-400">Work Name</p>
                                 <p className="text-sm font-medium">{displayWork.work_name}</p>
                             </div>
+                            <div className="col-span-2">
+                                <p className="text-xs text-gray-400">Brief Name (Hindi)</p>
+                                <p className="text-sm font-medium font-hindi">{displayWork.work_name_brief || '-'}</p>
+                            </div>
                             <div>
                                 <p className="text-xs text-gray-400">Panchayat / Block</p>
                                 <p className="text-sm font-medium">{displayWork.panchayat}, {displayWork.block}</p>
