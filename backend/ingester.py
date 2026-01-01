@@ -215,7 +215,7 @@ def process_dataframe(df: pd.DataFrame, db: Session):
                'total_released_amount': parse_float(row, 'Released Amount') if 'Released Amount' in row else parse_float(row, 'Total Released Amount'),
                'amount_pending': parse_float(row, 'Pending Amount') if 'Pending Amount' in row else parse_float(row, 'Amount Pending as per AS'),
                
-               'agency_name': row.get('Agency') or row.get('Agency Name'),
+               'agency_name': str(row.get('Agency') or row.get('Agency Name') or row.get('Name of Agency') or row.get('Executing Agency') or row.get('agency') or ''),
                'completion_timelimit_days': int(pd.to_numeric(row.get('Work Completion Timelimit as per AS (in days)'), errors='coerce') if pd.notna(pd.to_numeric(row.get('Work Completion Timelimit as per AS (in days)'), errors='coerce')) else 0),
                'probable_completion_date': parse_date(row, 'Probable End Date') if 'Probable End Date' in row else parse_date(row, 'Probable Date of Completion (संभावित पूर्णता तिथि)'),
                
