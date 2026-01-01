@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { LayoutDashboard, MapPin, Upload, LogOut, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import WorkDetailDrawer from '../components/WorkDetailDrawer';
+import MultiSelect from '../components/MultiSelect';
 
 // Debounce helper
 const useDebounce = (value, delay) => {
@@ -72,7 +73,7 @@ const AdminDashboard = () => {
         block: '',
         panchayat: '',
         department: '',
-        status: '',
+        status: [], // Changed to array for MultiSelect
         agency: '',
         year: ''
     });
@@ -89,10 +90,14 @@ const AdminDashboard = () => {
             params.append('limit', pagination.limit);
 
             // Filters
-            // Filters (Single Select)
+            // Filters
             Object.keys(filters).forEach(key => {
                 const val = filters[key];
-                if (val) params.append(key, val);
+                if (Array.isArray(val)) {
+                    val.forEach(v => params.append(key, v));
+                } else if (val) {
+                    params.append(key, val);
+                }
             });
 
             if (debouncedSearch) params.append('search', debouncedSearch);
@@ -126,7 +131,11 @@ const AdminDashboard = () => {
             const params = new URLSearchParams();
             Object.keys(filters).forEach(key => {
                 const val = filters[key];
-                if (val) params.append(key, val);
+                if (Array.isArray(val)) {
+                    val.forEach(v => params.append(key, v));
+                } else if (val) {
+                    params.append(key, val);
+                }
             });
             if (debouncedSearch) params.append('search', debouncedSearch);
 
@@ -267,7 +276,11 @@ const AdminDashboard = () => {
             const params = new URLSearchParams();
             Object.keys(filters).forEach(key => {
                 const val = filters[key];
-                if (val) params.append(key, val);
+                if (Array.isArray(val)) {
+                    val.forEach(v => params.append(key, v));
+                } else if (val) {
+                    params.append(key, val);
+                }
             });
             if (debouncedSearch) params.append('search', debouncedSearch);
 
@@ -450,14 +463,14 @@ const AdminDashboard = () => {
                             {filterOptions.agencies.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                         </select>
 
-                        <select
-                            className="bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-32"
+                        <MultiSelect
+                            options={filterOptions.statuses}
                             value={filters.status}
-                            onChange={(e) => setFilters(p => ({ ...p, status: e.target.value }))}
-                        >
-                            <option value="">All Status</option>
-                            {filterOptions.statuses.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                        </select>
+                            onChange={(val) => setFilters(p => ({ ...p, status: val }))}
+                            placeholder="Status..."
+                            label=""
+                            showSearch={false}
+                        />
 
 
 

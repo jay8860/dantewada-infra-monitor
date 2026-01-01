@@ -398,6 +398,25 @@ async def export_works(
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df.to_excel(writer, index=False, sheet_name='Works')
+            # Auto-wrap text
+            worksheet = writer.sheets['Works']
+            from openpyxl.styles import Alignment
+            for row in worksheet.iter_rows():
+                for cell in row:
+                    cell.alignment = Alignment(wrap_text=True, vertical='top')
+            
+            # Adjust column widths
+            for column in worksheet.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except: pass
+                adjusted_width = min(max_length + 2, 50) # Cap width at 50
+                worksheet.column_dimensions[column_letter].width = adjusted_width
+
         output.seek(0)
         
         return Response(
