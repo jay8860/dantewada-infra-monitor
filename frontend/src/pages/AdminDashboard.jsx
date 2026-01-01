@@ -124,9 +124,7 @@ const AdminDashboard = () => {
             const params = new URLSearchParams();
             Object.keys(filters).forEach(key => {
                 const val = filters[key];
-                if (Array.isArray(val) && val.length > 0) {
-                    val.forEach(v => params.append(key, v));
-                }
+                if (val) params.append(key, val);
             });
             if (debouncedSearch) params.append('search', debouncedSearch);
 
