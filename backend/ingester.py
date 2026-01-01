@@ -121,8 +121,15 @@ def process_dataframe(df: pd.DataFrame, db: Session):
             # --- 2. Map Data (Robust to Column Variations) ---
             # Status Normalization
             status_val = row.get('Work Status') or row.get('current_status') or 'Not Started'
-            if str(status_val).lower() == 'unstarted': status_val = 'Not Started'
-            if str(status_val).lower() == 'prossece': status_val = 'In Progress' 
+            s_lower = str(status_val).strip().lower()
+            
+            if s_lower in ['complete', 'completed', 'work completed', 'finished', 'done', 'physically completed']:
+                status_val = 'Completed'
+            elif s_lower in ['prossece', 'process', 'in progress', 'ongoing', 'started', 'work in progress', 'running']:
+                status_val = 'In Progress'
+            elif s_lower in ['unstarted', 'not started', 'pending', 'sanctioned']:
+                status_val = 'Not Started'
+            # Else keep original (e.g. Cancelled) 
 
             # Coordinate Logic: New > Existing > None
             # Check multiple casing for Lat/Lng

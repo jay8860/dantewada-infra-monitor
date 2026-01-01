@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Response, Query
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
 from typing import List, Optional
 from database import get_db
 import models, auth
@@ -186,9 +187,9 @@ async def get_work_locations(
     def apply_list_filter(q, col, values):
         if not values: return q
         # Handle cases where value might be empty string
-        clean_values = [v for v in values if v]
+        clean_values = [str(v).strip().lower() for v in values if v]
         if not clean_values: return q
-        return q.filter(col.in_(clean_values))
+        return q.filter(func.lower(col).in_(clean_values))
 
     query = apply_list_filter(query, models.Work.department, department)
     query = apply_list_filter(query, models.Work.panchayat, panchayat)
