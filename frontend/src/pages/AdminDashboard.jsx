@@ -199,8 +199,9 @@ const AdminDashboard = () => {
         let workData = workOrId;
 
         // If clicked from map, we might only have partial data.
-        // Ideally fetch full data.
-        if (workOrId.id && !workOrId.sanctioned_amount) {
+        // Map objects have 'title' but missing 'work_name', 'agency_name', etc.
+        // We check for a field that should exist in the full object but not in the map object.
+        if (workOrId.id && (!workOrId.work_name || !workOrId.agency_name)) {
             try {
                 const res = await api.get(`/works/${workOrId.id}`);
                 workData = res.data;
