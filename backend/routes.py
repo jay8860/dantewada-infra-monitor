@@ -189,7 +189,9 @@ async def get_work_locations(
         # Handle cases where value might be empty string
         clean_values = [str(v).strip().lower() for v in values if v]
         if not clean_values: return q
-        return q.filter(func.lower(col).in_(clean_values))
+        # Use trim + lower for robust matching against sloppy data (e.g. "Dantewada " vs "Dantewada")
+        # SQLite uses trim(), Postgres uses trim().
+        return q.filter(func.trim(func.lower(col)).in_(clean_values))
 
     query = apply_list_filter(query, models.Work.department, department)
     query = apply_list_filter(query, models.Work.panchayat, panchayat)

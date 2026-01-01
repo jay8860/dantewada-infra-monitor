@@ -413,13 +413,7 @@ const AdminDashboard = () => {
                             onChange={(val) => setFilters(p => ({ ...p, agency: val }))}
                         />
 
-                        <MultiSelect
-                            label="Financial Year"
-                            placeholder="All Years"
-                            options={filterOptions.years || []}
-                            value={filters.year}
-                            onChange={(val) => setFilters(p => ({ ...p, year: val }))}
-                        />
+                        {/* MultiSelect for Financial Year REMOVED as per user request */}
 
                         <MultiSelect
                             label="Status"
