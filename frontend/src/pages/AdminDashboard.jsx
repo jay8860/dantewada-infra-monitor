@@ -71,7 +71,7 @@ const AdminDashboard = () => {
     // --- State: Filters ---
     const [filters, setFilters] = useState({
         block: '',
-        panchayat: '',
+        panchayat: [], // Changed to array for MultiSelect
         department: '',
         status: [], // Changed to array for MultiSelect
         agency: '',
@@ -440,14 +440,14 @@ const AdminDashboard = () => {
                             {blockOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                         </select>
 
-                        <select
-                            className="bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-32"
+                        <MultiSelect
+                            options={filterOptions.panchayats}
                             value={filters.panchayat}
-                            onChange={(e) => setFilters(p => ({ ...p, panchayat: e.target.value }))}
-                        >
-                            <option value="">All GPs</option>
-                            {filterOptions.panchayats.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                        </select>
+                            onChange={(val) => setFilters(p => ({ ...p, panchayat: val }))}
+                            placeholder="Panchayat..."
+                            label=""
+                            showSearch={true}
+                        />
 
                         <select
                             className="bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-32"
