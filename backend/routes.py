@@ -188,11 +188,23 @@ async def get_village_summary(
         
     # Process with Pandas
     data = []
+    
+    # Target Agencies for Panchayat View (Exact strings from DB)
+    PANCHAYAT_AGENCIES = [
+        "CEO JANPAND PANCHAYAT KATEKALYAN",
+        "CEO JANPAND PANCHAYAT DANTEWADA", 
+        "CEO JANPAND PANCHAYAT GEEDAM",
+        "CEO JANPAND PANCHAYAT KUWAKONDA"
+    ]
+    
     for r in results:
-        # Panchayat View Logic: ONLY show work if agency is "CEO Janpad Panchayat {Block}"
+        # Panchayat View Logic
         if panchayat_view:
-            target_agency = f"CEO Janpad Panchayat {str(r.block).strip()}"
-            if not r.agency_name or r.agency_name.strip().lower() != target_agency.lower():
+            if not r.agency_name:
+                continue
+            # Normalize for check
+            agency = r.agency_name.strip().upper()
+            if agency not in PANCHAYAT_AGENCIES:
                 continue
 
         data.append({
