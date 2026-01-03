@@ -47,6 +47,7 @@ class Work(Base):
     verified_on_ground = Column(String, nullable=True) 
     inspection_date = Column(DateTime, nullable=True)
     remark = Column(Text, nullable=True)
+    admin_remarks = Column(Text, nullable=True) # New Field for Admin Notes
     csv_photo_info = Column(Text, nullable=True)
 
     # Coordinates

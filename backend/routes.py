@@ -159,6 +159,82 @@ async def get_work_filters(db: Session = Depends(get_db)):
         "years": get_clean_values(models.Work.financial_year)
     }
 
+@router.get("/works/summary/village")
+async def get_village_summary(
+    department: Optional[List[str]] = Query(None),
+    year: Optional[List[str]] = Query(None),
+    db: Session = Depends(get_db)
+):
+    # Base query
+    query = db.query(
+        models.Work.block,
+        models.Work.panchayat,
+        models.Work.current_status,
+        models.Work.sanctioned_amount
+    )
+    
+    # Apply optional filtering (Department/Year often useful for summary too)
+    if department:
+        query = query.filter(models.Work.department.in_(department))
+    if year:
+        query = query.filter(models.Work.financial_year.in_(year))
+        
+    results = query.all()
+    
+    if not results:
+        return []
+        
+    # Process with Pandas for easier pivot/aggregation
+    data = []
+    for r in results:
+        data.append({
+            "Block": r.block or "Unknown",
+            "Panchayat": r.panchayat or "Unknown",
+            "Status": r.current_status,
+            "Amount": r.sanctioned_amount or 0.0
+        })
+        
+    df = pd.DataFrame(data)
+    
+    # Helper to calculate stats
+    grouped = df.groupby(['Block', 'Panchayat'])
+    
+    summary_list = []
+    
+    for (block, panchayat), group in grouped:
+        # Total
+        total_count = len(group)
+        total_amount = group['Amount'].sum()
+        
+        # Completed
+        completed = group[group['Status'] == 'Completed']
+        completed_count = len(completed)
+        completed_amount = completed['Amount'].sum()
+        
+        # In Progress
+        in_progress = group[group['Status'] == 'In Progress']
+        in_progress_count = len(in_progress)
+        in_progress_amount = in_progress['Amount'].sum()
+        
+        # Not Started (Optional per request, but good to have to complete the picture)
+        # not_started = group[group['Status'] == 'Not Started'] 
+        
+        summary_list.append({
+            "block": block,
+            "panchayat": panchayat,
+            "total_works": int(total_count),
+            "total_amount": float(round(total_amount, 2)),
+            "completed_works": int(completed_count),
+            "completed_amount": float(round(completed_amount, 2)),
+            "progress_works": int(in_progress_count),
+            "progress_amount": float(round(in_progress_amount, 2))
+        })
+        
+    # Sort by Block then Panchayat
+    summary_list.sort(key=lambda x: (x['block'], x['panchayat']))
+    
+    return summary_list
+
 @router.get("/works/locations")
 async def get_work_locations(
     department: Optional[List[str]] = Query(None), 
@@ -572,3 +648,39 @@ async def assign_work(
     db.commit()
     
     return {"message": f"Work assigned to {officer.username}"}
+# ... existing code ...
+
+from pydantic import BaseModel
+
+class AdminUpdate(BaseModel):
+    inspection_deadline: Optional[datetime] = None
+    admin_remarks: Optional[str] = None
+
+@router.put("/works/{work_id}/admin")
+async def update_work_admin(
+    work_id: int,
+    update: AdminUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    work = db.query(models.Work).filter(models.Work.id == work_id).first()
+    if not work:
+        raise HTTPException(status_code=404, detail="Work not found")
+        
+    # Only update if provided (handle nulls if user wants to clear? for now assume frontend sends current val or new val)
+    # Actually, allow clearing by sending None? Pydantic Optional defaults to None if missing. 
+    # But if user sends null explicitly? 
+    # Let's trust the frontend sends what it wants to set.
+    
+    # Check if field is in update dict to distinguish between "not sent" and "sent as null"
+    # But for simplicity:
+    if update.inspection_deadline is not None:
+        work.inspection_deadline = update.inspection_deadline
+    if update.admin_remarks is not None:
+        work.admin_remarks = update.admin_remarks
+        
+    db.commit()
+    return {"message": "Updated"}
