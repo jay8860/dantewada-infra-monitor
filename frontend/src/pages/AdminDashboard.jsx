@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../api';
 import MapComponent from '../components/MapComponent';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } => 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { LayoutDashboard, MapPin, Upload, LogOut, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, RefreshCw, RotateCcw } from 'lucide-react';
 import WorkDetailDrawer from '../components/WorkDetailDrawer';
 import MultiSelect from '../components/MultiSelect';
@@ -393,12 +393,16 @@ const AdminDashboard = () => {
                             <span className="text-[10px] text-gray-500 uppercase">Completed</span>
                         </div>
                         <div className="flex flex-col items-center">
-                            <span className="font-bold text-yellow-600">{globalStats.in_progress?.toLocaleString() || 0}</span>
-                            <span className="text-[10px] text-gray-500 uppercase">Ongoing (Active)</span>
+                            <span className="font-bold text-blue-600">{globalStats.in_progress?.toLocaleString() || 0}</span>
+                            <span className="text-[10px] text-gray-500 uppercase">In Progress</span>
                         </div>
                         <div className="flex flex-col items-center">
-                            <span className="font-bold text-red-600">{globalStats.cancelled?.toLocaleString() || 0}</span>
-                            <span className="text-[10px] text-gray-500 uppercase">Cancelled</span>
+                            <span className="font-bold text-gray-600">{globalStats.not_started?.toLocaleString() || 0}</span>
+                            <span className="text-[10px] text-gray-500 uppercase">Not Started</span>
+                        </div>
+                        <div className="flex flex-col items-center">
+                            <span className="font-bold text-red-600">{globalStats.cc_pending?.toLocaleString() || 0}</span>
+                            <span className="text-[10px] text-gray-500 uppercase">CC Not Come</span>
                         </div>
                     </div>
                     <div className="h-8 w-px bg-gray-200"></div>

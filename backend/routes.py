@@ -134,11 +134,11 @@ async def get_work_stats(db: Session = Depends(get_db)):
 
     return {
         "total": total,
-        "completed": completed,
-        "in_progress": in_progress, # Now effectively "Active" (Ongoing)
+        "completed": stats.get('Completed', 0),
+        "in_progress": stats.get('In Progress', 0),
         "not_started": stats.get('Not Started', 0),
+        "cc_pending": stats.get('CC Not Come in DMF', 0),
         "cancelled": cancelled,
-        "halted": stats.get('Halted', 0),
         "last_sync": last_sync
     }
 
