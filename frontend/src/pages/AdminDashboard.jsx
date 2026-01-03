@@ -27,6 +27,7 @@ const AdminDashboard = () => {
     const [mapWorks, setMapWorks] = useState([]); // Decoupled map data (all points)
     const [summaryData, setSummaryData] = useState([]); // Village Summary Data
     const [globalStats, setGlobalStats] = useState({ total: 0, completed: 0, in_progress: 0, not_started: 0, cancelled: 0 });
+    const [panchayatView, setPanchayatView] = useState(false); // New Filter for Summary View
     const [filterOptions, setFilterOptions] = useState({ blocks: [], panchayats: [], departments: [], agencies: [], statuses: [], years: [] });
     const [officers, setOfficers] = useState([]);
 
@@ -161,13 +162,7 @@ const AdminDashboard = () => {
             const params = new URLSearchParams();
             if (filters.department) params.append('department', filters.department);
             if (filters.year) params.append('year', filters.year);
-            // Note: Block/Panchayat filters usually don't make sense for a "Summary" that lists ALL villages, 
-            // unless we want to filter the summary itself. 
-            // The requirement says "entire list is displayed... arranged block wise". 
-            // So we might ignore block filters or apply them? 
-            // Let's pass them if available so user can drill down to one block summary if they want.
-            // Check backend: backend accepts department, year. It doesn't accept block/panchayat yet.
-            // We can update backend if needed, but for now stick to dept/year as they slice across geography.
+            if (panchayatView) params.append('panchayat_view', 'true'); // New Param
 
             const response = await api.get('/works/summary/village', { params });
             setSummaryData(response.data);
@@ -176,7 +171,7 @@ const AdminDashboard = () => {
         } finally {
             setLoading(false);
         }
-    }, [viewMode, filters.department, filters.year]);
+    }, [viewMode, filters.department, filters.year, panchayatView]);
 
     // ...
 
@@ -620,6 +615,18 @@ const AdminDashboard = () => {
                                 )}
                                 <span className="hidden sm:inline">Export</span>
                             </button>
+                            {/* Panchayat View Toggle (Summary Only) */}
+                            {viewMode === 'summary' && (
+                                <label className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-2 rounded-lg text-sm font-medium border border-blue-200 cursor-pointer hover:bg-blue-100 transition whitespace-nowrap">
+                                    <input
+                                        type="checkbox"
+                                        checked={panchayatView}
+                                        onChange={(e) => setPanchayatView(e.target.checked)}
+                                        className="rounded text-blue-600 focus:ring-blue-500"
+                                    />
+                                    Panchayat View (CEO Janpad Only)
+                                </label>
+                            )}
                         </div>
                     </div>
                 </div>

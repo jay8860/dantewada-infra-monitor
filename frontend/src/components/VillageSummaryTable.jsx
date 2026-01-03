@@ -49,14 +49,22 @@ const VillageSummaryTable = ({ data }) => {
         { key: 'panchayat', label: 'Panchayat Name', align: 'left' },
         { key: 'total_works', label: 'Total Works', align: 'center' },
         { key: 'total_amount', label: 'Total Amt (L)', align: 'right' },
+
         { key: 'completed_works', label: 'Completed (No)', align: 'center' },
         { key: 'completed_amount', label: 'Completed (Amt)', align: 'right' },
+
         { key: 'progress_works', label: 'In Progress (No)', align: 'center' },
         { key: 'progress_amount', label: 'In Progress (Amt)', align: 'right' },
+
+        { key: 'not_started_works', label: 'Not Started (No)', align: 'center' },
+        { key: 'not_started_amount', label: 'Not Started (Amt)', align: 'right' },
+
+        { key: 'cc_pending_works', label: 'CC Pending (No)', align: 'center' },
+        { key: 'cc_pending_amount', label: 'CC Pending (Amt)', align: 'right' },
     ];
 
     if (!data || data.length === 0) {
-        return <div className="p-8 text-center text-gray-500">No summary data available.</div>;
+        return <div className="p-8 text-center text-gray-500">No summary data available for current filters.</div>;
     }
 
     return (
@@ -102,6 +110,12 @@ const VillageSummaryTable = ({ data }) => {
 
                                         <td className="p-3 text-center text-blue-700 bg-blue-50/30">{row.progress_works}</td>
                                         <td className="p-3 text-right text-blue-700 font-medium bg-blue-50/30">{row.progress_amount?.toFixed(2)}</td>
+
+                                        <td className="p-3 text-center text-gray-500">{row.not_started_works || 0}</td>
+                                        <td className="p-3 text-right text-gray-500">{row.not_started_amount?.toFixed(2) || '0.00'}</td>
+
+                                        <td className="p-3 text-center text-red-600 bg-red-50/30">{row.cc_pending_works || 0}</td>
+                                        <td className="p-3 text-right text-red-600 font-medium bg-red-50/30">{row.cc_pending_amount?.toFixed(2) || '0.00'}</td>
                                     </tr>
                                 ))}
                             </React.Fragment>

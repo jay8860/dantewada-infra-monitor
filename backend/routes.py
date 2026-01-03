@@ -163,6 +163,7 @@ async def get_work_filters(db: Session = Depends(get_db)):
 async def get_village_summary(
     department: Optional[List[str]] = Query(None),
     year: Optional[List[str]] = Query(None),
+    panchayat_view: bool = Query(False), # New Filter
     db: Session = Depends(get_db)
 ):
     # Base query
@@ -170,10 +171,11 @@ async def get_village_summary(
         models.Work.block,
         models.Work.panchayat,
         models.Work.current_status,
-        models.Work.sanctioned_amount
+        models.Work.sanctioned_amount,
+        models.Work.agency_name # Needed for filter
     )
     
-    # Apply optional filtering (Department/Year often useful for summary too)
+    # Apply optional filtering
     if department:
         query = query.filter(models.Work.department.in_(department))
     if year:
@@ -184,15 +186,24 @@ async def get_village_summary(
     if not results:
         return []
         
-    # Process with Pandas for easier pivot/aggregation
+    # Process with Pandas
     data = []
     for r in results:
+        # Panchayat View Logic: ONLY show work if agency is "CEO Janpad Panchayat {Block}"
+        if panchayat_view:
+            target_agency = f"CEO Janpad Panchayat {str(r.block).strip()}"
+            if not r.agency_name or r.agency_name.strip().lower() != target_agency.lower():
+                continue
+
         data.append({
             "Block": r.block or "Unknown",
             "Panchayat": r.panchayat or "Unknown",
             "Status": r.current_status,
             "Amount": r.sanctioned_amount or 0.0
         })
+        
+    if not data:
+        return [] # Return empty if filter removed all
         
     df = pd.DataFrame(data)
     
@@ -216,8 +227,19 @@ async def get_village_summary(
         in_progress_count = len(in_progress)
         in_progress_amount = in_progress['Amount'].sum()
         
-        # Not Started (Optional per request, but good to have to complete the picture)
-        # not_started = group[group['Status'] == 'Not Started'] 
+        # Not Started
+        not_started = group[group['Status'] == 'Not Started'] 
+        not_started_count = len(not_started)
+        not_started_amount = not_started['Amount'].sum()
+
+        # CC Not Come
+        # Note: Check exact string match from user request "CC Not Come in DMF"
+        # Based on routes.py line 140, usage is 'CC Not Come in DMF' or similar. 
+        # Let's match roughly or exact. Providing exact from stats API code: 'CC Not Come in DMF'
+        cc_pending = group[group['Status'] == 'CC Not Come in DMF']
+        cc_pending_count = len(cc_pending)
+        cc_pending_amount = cc_pending['Amount'].sum()
+
         
         summary_list.append({
             "block": block,
@@ -227,7 +249,11 @@ async def get_village_summary(
             "completed_works": int(completed_count),
             "completed_amount": float(round(completed_amount, 2)),
             "progress_works": int(in_progress_count),
-            "progress_amount": float(round(in_progress_amount, 2))
+            "progress_amount": float(round(in_progress_amount, 2)),
+            "not_started_works": int(not_started_count),
+            "not_started_amount": float(round(not_started_amount, 2)),
+            "cc_pending_works": int(cc_pending_count),
+            "cc_pending_amount": float(round(cc_pending_amount, 2))
         })
         
     # Sort by Block then Panchayat
