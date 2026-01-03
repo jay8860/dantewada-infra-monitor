@@ -129,6 +129,9 @@ def process_dataframe(df: pd.DataFrame, db: Session):
                 status_val = 'In Progress'
             elif s_lower in ['unstarted', 'not started', 'pending', 'sanctioned']:
                 status_val = 'Not Started'
+            # Explicitly map CC Not Come variants
+            elif 'cc not come' in s_lower or 'cc pending' in s_lower:
+                status_val = 'CC Not Come in DMF'
             # Else keep original (e.g. Cancelled) 
 
             # Coordinate Logic: New > Existing > None
