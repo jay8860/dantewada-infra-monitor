@@ -50,8 +50,7 @@ const AdminDashboard = () => {
         total_released_amount: true,
         amount_pending: true,
         probable_completion_date: false, // hidden by default to save space
-        inspection_deadline: true, // New
-        admin_remarks: true, // New
+        probable_completion_date: false, // hidden by default to save space
         assignment: true
     });
 
@@ -262,21 +261,7 @@ const AdminDashboard = () => {
         }
     };
 
-    const handleFileUpload = async () => {
-        if (!file) return;
-        const formData = new FormData();
-        formData.append('file', file);
-        try {
-            await api.post('/works/upload', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
-            alert('File uploaded successfully');
-            setFile(null);
-            fetchWorks();
-        } catch (error) {
-            console.error("Upload failed", error);
-        }
-    }
+
 
     const handleSyncSheet = async (useDefault = false) => {
         if (!useDefault && !sheetUrl) return;
@@ -579,18 +564,7 @@ const AdminDashboard = () => {
                             )}
                         </div>
 
-                        {/* Upload */}
-                        <div className="relative group">
-                            <label className="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition whitespace-nowrap">
-                                <Upload size={16} /> <span className="hidden sm:inline">Upload CSV</span>
-                                <input
-                                    type="file"
-                                    accept=".csv,.xlsx"
-                                    onChange={(e) => setFile(e.target.files[0])}
-                                    className="hidden"
-                                />
-                            </label>
-                        </div>
+
 
                         {/* Google Sheet Sync */}
                         {/* Google Sheet Sync & Export */}
@@ -728,7 +702,7 @@ const AdminDashboard = () => {
                                                     { key: 'total_released_amount', label: 'Released (Lakhs)' },
                                                     { key: 'amount_pending', label: 'Pending (Lakhs)' },
                                                     { key: 'probable_completion_date', label: 'Est. End' },
-                                                    { key: 'remark', label: 'Remarks' },
+
                                                     { key: 'assignment', label: 'Inspection Status' },
                                                 ].map((col) => (
                                                     visibleColumns[col.key] && (
@@ -746,7 +720,7 @@ const AdminDashboard = () => {
                                                         </th>
                                                     )
                                                 ))}
-                                                <th className="p-4 font-semibold text-gray-600 sticky right-0 bg-gray-50 drop-shadow-sm">Actions</th>
+
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y">
@@ -810,7 +784,7 @@ const AdminDashboard = () => {
                                                         </td>
                                                     )}
                                                     {/* NOTE: I am fixing offset line issues by replacing the whole block or finding a better anchor */}
-                                                    {visibleColumns.remark && <td className="p-4 text-sm text-gray-500 italic max-w-xs truncate">{work.remark || '-'}</td>}
+
 
                                                     {/* Deadline Input */}
                                                     {visibleColumns.inspection_deadline && (
@@ -842,22 +816,7 @@ const AdminDashboard = () => {
                                                         </td>
                                                     )}
 
-                                                    {/* Admin Remarks */}
-                                                    {visibleColumns.admin_remarks && (
-                                                        <td className="p-4">
-                                                            <textarea
-                                                                className="border rounded px-2 py-1 text-xs w-48 focus:ring-2 focus:ring-blue-500 outline-none resize-none h-16 bg-yellow-50/50 focus:bg-white transition"
-                                                                placeholder="Add note..."
-                                                                value={work.admin_remarks || ''}
-                                                                onChange={(e) => {
-                                                                    // We use local state update via handleAdminUpdate's optimistic update
-                                                                    // But for textarea, debounce is better. 
-                                                                    // For simplicity/speed: onBlur or just onChange with optimistic.
-                                                                    handleAdminUpdate(work.id, 'admin_remarks', e.target.value);
-                                                                }}
-                                                            />
-                                                        </td>
-                                                    )}
+
 
                                                     {visibleColumns.assignment && (
                                                         <td className="p-4 whitespace-nowrap">
@@ -883,14 +842,7 @@ const AdminDashboard = () => {
                                                         </td>
                                                     )}
 
-                                                    <td className="p-4 sticky right-0 bg-white group-hover:bg-blue-50/30">
-                                                        <button
-                                                            onClick={() => handleViewDetails(work)}
-                                                            className="text-blue-600 hover:text-blue-800 text-xs font-semibold whitespace-nowrap"
-                                                        >
-                                                            Details
-                                                        </button>
-                                                    </td>
+
                                                 </tr>
                                             ))}
                                             {works.length === 0 && !loading && (
