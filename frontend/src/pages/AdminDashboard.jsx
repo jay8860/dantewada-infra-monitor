@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../api';
 import MapComponent from '../components/MapComponent';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import { LayoutDashboard, MapPin, Upload, LogOut, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useNavigate } => 'react-router-dom';
+import { LayoutDashboard, MapPin, Upload, LogOut, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, RefreshCw, RotateCcw } from 'lucide-react';
 import WorkDetailDrawer from '../components/WorkDetailDrawer';
 import MultiSelect from '../components/MultiSelect';
 
@@ -269,6 +269,18 @@ const AdminDashboard = () => {
         }
     };
 
+    const resetFilters = () => {
+        setFilters({
+            block: '',
+            panchayat: [],
+            department: '',
+            status: [],
+            agency: '',
+            year: ''
+        });
+        setSearchTerm('');
+    };
+
     const handleDownload = async () => {
         setDownloading(true);
         try {
@@ -429,6 +441,15 @@ const AdminDashboard = () => {
                     </div>
 
                     <div className="flex gap-3 w-full md:w-auto items-center flex-wrap pb-2 md:pb-0">
+                        {/* Reset Button */}
+                        <button
+                            onClick={resetFilters}
+                            className="bg-gray-100 border hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
+                            title="Reset all filters"
+                        >
+                            <RotateCcw size={16} /> Reset
+                        </button>
+
                         {/* Dynamic Filters */}
                         {/* Single Select Filters */}
                         <select
