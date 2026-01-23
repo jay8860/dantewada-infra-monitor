@@ -150,13 +150,20 @@ async def get_work_filters(db: Session = Depends(get_db)):
         # Deduplicate and strip, but preserve original casing (User Requirement: Exact Similarity)
         return sorted(list(set(str(r[0]).strip() for r in raw if r[0])))
 
+    # Get earliest date for default filter
+    from sqlalchemy import func
+    min_date = db.query(func.min(models.Work.sanctioned_date)).scalar()
+    # Format as YYYY-MM-DD string if it exists
+    min_date_str = min_date.strftime('%Y-%m-%d') if min_date else None
+
     return {
         "blocks": get_clean_values(models.Work.block),
         "panchayats": get_clean_values(models.Work.panchayat),
         "departments": get_clean_values(models.Work.department),
         "agencies": get_clean_values(models.Work.agency_name),
         "statuses": get_clean_values(models.Work.current_status),
-        "years": get_clean_values(models.Work.financial_year)
+        "years": get_clean_values(models.Work.financial_year),
+        "earliest_date": min_date_str
     }
 
 @router.get("/works/summary/village")

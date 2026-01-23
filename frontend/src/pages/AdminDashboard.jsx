@@ -204,6 +204,14 @@ const AdminDashboard = () => {
                 ]);
                 setGlobalStats(statsRes.data);
                 setFilterOptions(filtersRes.data);
+
+                // Set Default Date Range (Earliest -> Today) as per user request
+                const today = new Date().toISOString().split('T')[0];
+                if (filtersRes.data.earliest_date) {
+                    setDateRange({ start: filtersRes.data.earliest_date, end: today });
+                } else {
+                    setDateRange(p => ({ ...p, end: today })); // Fallback if no data
+                }
             } catch (error) {
                 console.error("Failed to fetch global data", error);
             }
