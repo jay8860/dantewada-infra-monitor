@@ -3,7 +3,7 @@ import api from '../api';
 import MapComponent from '../components/MapComponent';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { LayoutDashboard, MapPin, Upload, LogOut, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, RefreshCw, RotateCcw } from 'lucide-react';
+import { LayoutDashboard, MapPin, Upload, LogOut, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, RefreshCw, RotateCcw, Calendar } from 'lucide-react';
 import WorkDetailDrawer from '../components/WorkDetailDrawer';
 import MultiSelect from '../components/MultiSelect';
 import VillageSummaryTable from '../components/VillageSummaryTable';
@@ -34,7 +34,7 @@ const AdminDashboard = () => {
     // --- State: Search, Sort, Pagination ---
     const [searchTerm, setSearchTerm] = useState('');
     const debouncedSearch = useDebounce(searchTerm, 500);
-    const [sortConfig, setSortConfig] = useState({ key: '', direction: 'asc' });
+    const [sortConfig, setSortConfig] = useState({ key: 'sanctioned_date', direction: 'desc' });
     const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 0 });
     const [visibleColumns, setVisibleColumns] = useState({
         work_code: true,
@@ -81,6 +81,7 @@ const AdminDashboard = () => {
         agency: '',
         year: ''
     });
+    const [dateRange, setDateRange] = useState({ start: '', end: '' });
 
     // --- Fetch TABLE Works (Paginated) ---
     const fetchWorks = useCallback(async () => {
@@ -94,7 +95,6 @@ const AdminDashboard = () => {
             params.append('limit', pagination.limit);
 
             // Filters
-            // Filters
             Object.keys(filters).forEach(key => {
                 const val = filters[key];
                 if (Array.isArray(val)) {
@@ -103,6 +103,10 @@ const AdminDashboard = () => {
                     params.append(key, val);
                 }
             });
+
+            // Date Range
+            if (dateRange.start) params.append('start_date', dateRange.start);
+            if (dateRange.end) params.append('end_date', dateRange.end);
 
             if (debouncedSearch) params.append('search', debouncedSearch);
             if (sortConfig.key) {
@@ -125,7 +129,7 @@ const AdminDashboard = () => {
         } finally {
             setLoading(false);
         }
-    }, [pagination.page, pagination.limit, filters, debouncedSearch, sortConfig]);
+    }, [pagination.page, pagination.limit, filters, dateRange, debouncedSearch, sortConfig]);
 
     // --- Fetch MAP Works (All Points) ---
     const fetchMapWorks = useCallback(async () => {
@@ -141,6 +145,10 @@ const AdminDashboard = () => {
                     params.append(key, val);
                 }
             });
+            // Date Range for Map
+            if (dateRange.start) params.append('start_date', dateRange.start);
+            if (dateRange.end) params.append('end_date', dateRange.end);
+
             if (debouncedSearch) params.append('search', debouncedSearch);
 
             const response = await api.get('/works/locations', { params });
@@ -150,7 +158,10 @@ const AdminDashboard = () => {
         } finally {
             setMapLoading(false);
         }
-    }, [viewMode, filters, debouncedSearch]);
+    }, [viewMode, filters, dateRange, debouncedSearch]);
+
+    // ... (keeping fetchSummary as is, or should update it too? User only asked for "showing works" which implies table list. 
+    // Usually summary aggregation ignores detailed date filters unless requested. Staying safe.)
 
     // --- Fetch SUMMARY Data ---
     const fetchSummary = useCallback(async () => {
@@ -225,15 +236,20 @@ const AdminDashboard = () => {
     // Reset Page on Filter Change
     useEffect(() => {
         setPagination(prev => ({ ...prev, page: 1 }));
-    }, [filters, debouncedSearch]);
+    }, [filters, dateRange, debouncedSearch]);
 
 
     // --- Handlers ---
     const handleSort = (key) => {
-        setSortConfig(current => ({
-            key,
-            direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
-        }));
+        setSortConfig(current => {
+            if (current.key !== key) {
+                return { key, direction: 'desc' };
+            }
+            return {
+                key,
+                direction: current.direction === 'desc' ? 'asc' : 'desc'
+            };
+        });
     };
 
     const handleViewDetails = async (workOrId) => {
@@ -307,6 +323,7 @@ const AdminDashboard = () => {
             agency: '',
             year: ''
         });
+        setDateRange({ start: '', end: '' });
         setSearchTerm('');
     };
 
@@ -536,7 +553,36 @@ const AdminDashboard = () => {
                             showSearch={false}
                         />
 
-
+                        {/* Date Filters */}
+                        <div className="flex items-center gap-2 bg-white border rounded-lg px-2 py-1.5 shadow-sm h-[38px]">
+                            <span className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1"><Calendar size={12} /> AS Date</span>
+                            <div className="h-4 w-px bg-gray-200"></div>
+                            <input
+                                type="date"
+                                value={dateRange.start}
+                                onChange={(e) => setDateRange(p => ({ ...p, start: e.target.value }))}
+                                className="text-xs outline-none text-gray-700 w-[110px] bg-transparent"
+                                placeholder="From"
+                            />
+                            <span className="text-gray-400 text-xs">-</span>
+                            <input
+                                type="date"
+                                value={dateRange.end}
+                                onChange={(e) => setDateRange(p => ({ ...p, end: e.target.value }))}
+                                className="text-xs outline-none text-gray-700 w-[110px] bg-transparent"
+                                placeholder="To"
+                            />
+                            {/* Today shortcut */}
+                            <button
+                                onClick={() => {
+                                    const today = new Date().toISOString().split('T')[0];
+                                    setDateRange({ start: today, end: today });
+                                }}
+                                className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded border border-blue-100 font-bold hover:bg-blue-100 uppercase tracking-wide"
+                            >
+                                Today
+                            </button>
+                        </div>
 
                         {/* Column Toggle */}
                         <div className="relative">

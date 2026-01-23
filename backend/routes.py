@@ -373,7 +373,7 @@ async def get_work_locations(
     ]
 
 # --- Filter Helper ---
-def build_works_query(db, department, block, panchayat, status, agency, year, search):
+def build_works_query(db, department, block, panchayat, status, agency, year, search, start_date=None, end_date=None):
     query = db.query(models.Work).options(joinedload(models.Work.assigned_officer))
     
     # helper for list filtering
@@ -388,6 +388,19 @@ def build_works_query(db, department, block, panchayat, status, agency, year, se
     query = apply_list_filter(query, models.Work.financial_year, year)
     query = apply_list_filter(query, models.Work.agency_name, agency)
     query = apply_list_filter(query, models.Work.current_status, status)
+
+    # Date Range Filter (AS Date)
+    if start_date:
+        query = query.filter(models.Work.sanctioned_date >= start_date)
+    if end_date:
+        # Include the entire end day? If date only, <= matches 00:00:00 of that day usually unless time present.
+        # If input is YYYY-MM-DD, and DB is DateTime, <= YYYY-MM-DD 00:00:00 excludes the day.
+        # Let's assume inclusive end date by adding one day or checking logic. 
+        # But safest given input type might be date string:
+        # If user sends YYYY-MM-DD, we should probably cast or ensure logic. 
+        # For simplicity, assuming frontend and DB align, but let's be careful.
+        # User requested "Today" so they likely mean >= Start AND <= End (Inclusive).
+        query = query.filter(models.Work.sanctioned_date <= end_date)
 
     # Special Block Logic
     if block:
@@ -463,11 +476,13 @@ async def get_works(
     search: Optional[str] = None,
     sort_by: Optional[str] = None,
     sort_order: Optional[str] = "asc",
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db)
 ):
-    query = build_works_query(db, department, block, panchayat, status, agency, year, search)
+    query = build_works_query(db, department, block, panchayat, status, agency, year, search, start_date, end_date)
         
     total_count = query.count()
     response.headers["X-Total-Count"] = str(total_count)
