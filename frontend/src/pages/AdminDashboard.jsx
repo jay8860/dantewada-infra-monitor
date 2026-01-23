@@ -576,7 +576,7 @@ const AdminDashboard = () => {
                             <button
                                 onClick={() => {
                                     const today = new Date().toISOString().split('T')[0];
-                                    setDateRange({ start: today, end: today });
+                                    setDateRange(p => ({ ...p, end: today }));
                                 }}
                                 className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded border border-blue-100 font-bold hover:bg-blue-100 uppercase tracking-wide"
                             >
