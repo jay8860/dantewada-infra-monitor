@@ -26,6 +26,8 @@ const OfficerDashboard = () => {
     // Form State
     const [photo, setPhoto] = useState(null);
     const [status, setStatus] = useState('In Progress');
+    const [remarks, setRemarks] = useState('');
+    const [declarationChecked, setDeclarationChecked] = useState(false);
     const [location, setLocation] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [usingManualLoc, setUsingManualLoc] = useState(false);
@@ -52,8 +54,12 @@ const OfficerDashboard = () => {
 
             // Filter for 'My Assignments'
             if (user?.id) {
-                // Use loose equality (==) as IDs might differ in type (string vs number)
-                const myTasks = data.filter(w => w.assigned_officer_id == user.id);
+                const userAgencies = user.allowed_agencies ? user.allowed_agencies.split(',').map(a => a.trim()) : [];
+                const myTasks = data.filter(w => {
+                    const assignedById = w.assigned_officer_id == user.id;
+                    const matchesAgency = userAgencies.includes(w.agency_name);
+                    return assignedById || matchesAgency;
+                });
                 setAssignedWorks(myTasks);
             }
         } catch (error) {
@@ -132,6 +138,10 @@ const OfficerDashboard = () => {
             alert("Please fill all fields and capture location");
             return;
         }
+        if (!declarationChecked) {
+            alert("Please check the declaration box to confirm the photo is recent.");
+            return;
+        }
 
         setSubmitting(true);
         const formData = new FormData();
@@ -139,13 +149,15 @@ const OfficerDashboard = () => {
         formData.append('latitude', location?.latitude || 0);
         formData.append('longitude', location?.longitude || 0);
         formData.append('photos', photo);
-        formData.append('remarks', ""); // Ensure remarks is sent
+        formData.append('remarks', remarks); 
         formData.append('work_id', selectedWork.id);
 
         try {
             await api.post(`/works/${selectedWork.id}/inspections`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
             alert("Update Successful!");
             setPhoto(null);
+            setRemarks('');
+            setDeclarationChecked(false);
             setSelectedWork(null);
             fetchWorks();
         } catch (error) {
@@ -153,6 +165,7 @@ const OfficerDashboard = () => {
                 await saveOfflineUpdate({
                     workId: selectedWork.id,
                     status,
+                    remarks, // Save offline too
                     latitude: location?.latitude || 0,
                     longitude: location?.longitude || 0,
                     photoBlob: photo,
@@ -161,6 +174,8 @@ const OfficerDashboard = () => {
                 alert("Saved offline!");
                 checkPending();
                 setPhoto(null);
+                setRemarks('');
+                setDeclarationChecked(false);
                 setSelectedWork(null);
             }
         } finally {
@@ -254,7 +269,10 @@ const OfficerDashboard = () => {
                                 </button>
                             </div>
                             {location && (
-                                <p className="text-xs text-center mt-2 text-green-600 font-mono">Lat: {location.latitude.toFixed(5)}, Lng: {location.longitude.toFixed(5)}</p>
+                                <p className="text-xs text-center mt-2 text-green-600 font-mono">
+                                    Lat: {location.latitude ? parseFloat(location.latitude).toFixed(5) : '0.00000'}, 
+                                    Lng: {location.longitude ? parseFloat(location.longitude).toFixed(5) : '0.00000'}
+                                </p>
                             )}
                             {usingManualLoc && (
                                 <div className="mt-2 grid grid-cols-2 gap-2">
@@ -262,6 +280,17 @@ const OfficerDashboard = () => {
                                     <input placeholder="Lng" type="number" step="any" className="border p-2 rounded" onChange={e => setLocation(p => ({ ...p, longitude: e.target.value }))} />
                                 </div>
                             )}
+                        </div>
+
+                        <div className="mt-4">
+                            <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Remarks</label>
+                            <textarea 
+                                className="w-full border p-3 rounded-lg bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none" 
+                                rows="3" 
+                                placeholder="Enter any user remarks here..."
+                                value={remarks} 
+                                onChange={e => setRemarks(e.target.value)}
+                            />
                         </div>
 
                         <div>
@@ -281,6 +310,19 @@ const OfficerDashboard = () => {
                                     </div>
                                 )}
                             </div>
+                        </div>
+
+                        <div className="mt-2 mb-2 flex items-start gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                            <input 
+                                type="checkbox" 
+                                id="declaration"
+                                className="mt-1 w-5 h-5 cursor-pointer accent-blue-600 rounded flex-shrink-0"
+                                checked={declarationChecked}
+                                onChange={e => setDeclarationChecked(e.target.checked)}
+                            />
+                            <label htmlFor="declaration" className="text-sm text-gray-700 cursor-pointer select-none">
+                                This photo is the latest photo and the inspection has happened within two days of photo being uploaded.
+                            </label>
                         </div>
 
                         <button disabled={submitting} type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-bold shadow-lg shadow-blue-200 transition disabled:opacity-70 disabled:cursor-not-allowed">

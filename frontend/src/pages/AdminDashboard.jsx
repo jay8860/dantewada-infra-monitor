@@ -3,10 +3,11 @@ import api from '../api';
 import MapComponent from '../components/MapComponent';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { LayoutDashboard, MapPin, Upload, LogOut, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, RefreshCw, RotateCcw, Calendar } from 'lucide-react';
+import { LayoutDashboard, MapPin, Upload, LogOut, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, RefreshCw, RotateCcw, Calendar, Users, Plus, Edit, UserX, CheckCircle } from 'lucide-react';
 import WorkDetailDrawer from '../components/WorkDetailDrawer';
 import MultiSelect from '../components/MultiSelect';
 import VillageSummaryTable from '../components/VillageSummaryTable';
+import UserManagementModal from '../components/UserManagementModal';
 
 // Debounce helper
 const useDebounce = (value, delay) => {
@@ -49,13 +50,16 @@ const AdminDashboard = () => {
         financial_year: true,
         total_released_amount: true,
         amount_pending: true,
-        probable_completion_date: false, // hidden by default to save space
-        probable_completion_date: false, // hidden by default to save space
-        assignment: true
+        probable_completion_date: false,
+        photos: false,
+        assignment: true,
+        user_remark: true,
+        photo_upload_date: true,
+        reported_status: true
     });
-
-    // --- State: Assignment ---
     const [assignmentModal, setAssignmentModal] = useState({ isOpen: false, workId: null, officerId: '', days: '' });
+    const [selectedWorks, setSelectedWorks] = useState([]);
+    const [bulkAssignModal, setBulkAssignModal] = useState(false);
 
     // --- State: UI & Controls ---
     const [viewMode, setViewMode] = useState('table'); // 'table' or 'map'
@@ -71,6 +75,12 @@ const AdminDashboard = () => {
     const [syncModalOpen, setSyncModalOpen] = useState(false);
     const [sheetUrl, setSheetUrl] = useState('');
     const [syncing, setSyncing] = useState(false);
+
+    // --- State: User Management ---
+    const [allUsers, setAllUsers] = useState([]);
+    const [userModalOpen, setUserModalOpen] = useState(false);
+    const [editingUser, setEditingUser] = useState(null);
+    const [usersLoading, setUsersLoading] = useState(false);
 
     // --- State: Filters ---
     const [filters, setFilters] = useState({
@@ -238,6 +248,47 @@ const AdminDashboard = () => {
         setPagination(prev => ({ ...prev, page: 1 }));
     }, [filters, dateRange, debouncedSearch]);
 
+    // Bulk Select logic
+    const toggleSelectWork = (id) => {
+        setSelectedWorks(prev => prev.includes(id) ? prev.filter(wid => wid !== id) : [...prev, id]);
+    };
+    const toggleSelectAll = (e) => {
+        if (e.target.checked) {
+            setSelectedWorks(works.map(w => w.id));
+        } else {
+            setSelectedWorks([]);
+        }
+    };
+
+    const handleBulkAssign = async () => {
+        if (selectedWorks.length === 0) {
+            alert("No works selected.");
+            return;
+        }
+        if (!assignmentModal.officerId) {
+            alert("Please select an agency/officer.");
+            return;
+        }
+        setLoading(true);
+        try {
+            await api.put('/works/bulk-assign', {
+                work_ids: selectedWorks,
+                username: assignmentModal.officerId,
+                deadline_days: assignmentModal.days ? parseInt(assignmentModal.days) : null
+            });
+            alert("Bulk assignment successful!");
+            setSelectedWorks([]);
+            setBulkAssignModal(false);
+            setAssignmentModal({ isOpen: false, workId: null, officerId: '', days: '' });
+            fetchWorks();
+        } catch (error) {
+            alert("Failed to assign works.");
+            console.error(error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
 
     // --- Handlers ---
     const handleSort = (key) => {
@@ -367,6 +418,25 @@ const AdminDashboard = () => {
         }
     };
 
+    const handleExportInspectionStatus = async () => {
+        setDownloading(true);
+        try {
+            const response = await api.get('/reports/inspection-status', { responseType: 'blob' });
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `inspection_status_report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error) {
+            console.error("Export inspection status failed", error);
+            alert("Failed to export inspection report.");
+        } finally {
+            setDownloading(false);
+        }
+    };
+
     const handleAssignClick = (work) => {
         setAssignmentModal({ isOpen: true, workId: work.id, officerId: work.assigned_officer_id || '', days: '' });
     };
@@ -390,6 +460,35 @@ const AdminDashboard = () => {
 
     const toggleColumn = (col) => {
         setVisibleColumns(prev => ({ ...prev, [col]: !prev[col] }));
+    };
+
+    // --- User Management Functions ---
+    const fetchUsers = async () => {
+        setUsersLoading(true);
+        try {
+            const res = await api.get('/users');
+            setAllUsers(res.data);
+        } catch (err) {
+            console.error('Failed to fetch users', err);
+        } finally {
+            setUsersLoading(false);
+        }
+    };
+
+    const handleDeactivateUser = async (u) => {
+        const action = u.is_active !== false ? 'deactivate' : 'reactivate';
+        if (!confirm(`Are you sure you want to ${action} "${u.username}"?`)) return;
+        try {
+            if (u.is_active !== false) {
+                await api.delete(`/users/${u.id}`);
+            } else {
+                await api.put(`/users/${u.id}`, { is_active: true });
+            }
+            fetchUsers();
+        } catch (err) {
+            console.error(`Failed to ${action} user`, err);
+            alert(`Failed: ${err.response?.data?.detail || err.message}`);
+        }
     };
 
     const renderPagination = () => {
@@ -481,6 +580,12 @@ const AdminDashboard = () => {
                                 className={`px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition ${viewMode === 'summary' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                             >
                                 <LayoutDashboard size={16} className="rotate-90" /> Summary
+                            </button>
+                            <button
+                                onClick={() => { setViewMode('users'); fetchUsers(); }}
+                                className={`px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition ${viewMode === 'users' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                <Users size={16} /> Users
                             </button>
                         </div>
 
@@ -622,6 +727,17 @@ const AdminDashboard = () => {
                                 <ArrowUpDown size={16} /> <span className="hidden sm:inline">Sync GSheet</span>
                             </button>
 
+                            {/* Bulk Assign */}
+                            <button
+                                onClick={() => {
+                                    if (selectedWorks.length === 0) return alert("Select works to attach");
+                                    setBulkAssignModal(true);
+                                }}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition whitespace-nowrap ${selectedWorks.length > 0 ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+                            >
+                                <span className="hidden sm:inline">Bulk Assign ({selectedWorks.length})</span>
+                            </button>
+
                             {/* Download Excel */}
                             <button
                                 onClick={handleDownload}
@@ -633,8 +749,23 @@ const AdminDashboard = () => {
                                 ) : (
                                     <Upload size={16} className="rotate-180" />
                                 )}
-                                <span className="hidden sm:inline">Export</span>
+                                <span className="hidden sm:inline">Export Works</span>
                             </button>
+                            
+                            {/* Export Inspection Status */}
+                            <button
+                                onClick={handleExportInspectionStatus}
+                                disabled={downloading}
+                                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition whitespace-nowrap disabled:opacity-50 shadow-sm"
+                            >
+                                {downloading ? (
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                ) : (
+                                    <Upload size={16} className="rotate-180" />
+                                )}
+                                <span className="hidden sm:inline">Export Status Report</span>
+                            </button>
+
                             {/* Panchayat View Toggle (Summary Only) */}
                             {viewMode === 'summary' && (
                                 <label className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-2 rounded-lg text-sm font-medium border border-blue-200 cursor-pointer hover:bg-blue-100 transition whitespace-nowrap">
@@ -726,6 +857,96 @@ const AdminDashboard = () => {
                         </div>
                     ) : viewMode === 'summary' ? (
                         <VillageSummaryTable data={summaryData} />
+                    ) : viewMode === 'users' ? (
+                        /* ====== USER MANAGEMENT VIEW ====== */
+                        <div className="h-full overflow-auto p-4">
+                            <div className="bg-white rounded-xl shadow-sm border">
+                                {/* Header */}
+                                <div className="p-4 border-b flex items-center justify-between">
+                                    <div>
+                                        <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><Users size={20} /> User Management</h2>
+                                        <p className="text-xs text-gray-500 mt-0.5">Create and manage user access to the portal</p>
+                                    </div>
+                                    <button
+                                        onClick={() => { setEditingUser(null); setUserModalOpen(true); }}
+                                        className="flex items-center gap-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:from-indigo-700 hover:to-purple-700 transition-all shadow-sm hover:shadow-md"
+                                    >
+                                        <Plus size={14} /> Create User
+                                    </button>
+                                </div>
+
+                                {/* User Table */}
+                                {usersLoading ? (
+                                    <div className="flex justify-center py-12">
+                                        <div className="animate-spin h-8 w-8 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+                                    </div>
+                                ) : (
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-gray-50 border-b">
+                                            <tr>
+                                                <th className="p-4 font-semibold text-gray-600">#</th>
+                                                <th className="p-4 font-semibold text-gray-600">Username</th>
+                                                <th className="p-4 font-semibold text-gray-600">Role</th>
+                                                <th className="p-4 font-semibold text-gray-600">Department</th>
+                                                <th className="p-4 font-semibold text-gray-600">Access Scope</th>
+                                                <th className="p-4 font-semibold text-gray-600">Status</th>
+                                                <th className="p-4 font-semibold text-gray-600">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y">
+                                            {allUsers.map((u, idx) => (
+                                                <tr key={u.id} className="hover:bg-blue-50/30 transition-colors">
+                                                    <td className="p-4 text-gray-400 text-xs">{idx + 1}</td>
+                                                    <td className="p-4 font-medium text-gray-800">{u.username}</td>
+                                                    <td className="p-4">
+                                                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${u.role === 'admin' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                            {u.role === 'admin' ? '🔑 Admin' : '👤 Officer'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-4 text-gray-600">{u.department || <span className="text-gray-400 italic">All</span>}</td>
+                                                    <td className="p-4">
+                                                        {u.allowed_blocks || u.allowed_panchayats || u.allowed_agencies ? (
+                                                            <div className="text-xs space-y-0.5">
+                                                                {u.allowed_agencies && <div><span className="font-medium text-gray-500">Agencies:</span> {u.allowed_agencies}</div>}
+                                                                {u.allowed_blocks && <div><span className="font-medium text-gray-500">Blocks:</span> {u.allowed_blocks}</div>}
+                                                                {u.allowed_panchayats && <div><span className="font-medium text-gray-500">GPs:</span> {u.allowed_panchayats}</div>}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-xs text-gray-400 italic">Full Access</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${u.is_active !== false ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                                            {u.is_active !== false ? 'Active' : 'Inactive'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-4">
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                onClick={() => { setEditingUser(u); setUserModalOpen(true); }}
+                                                                className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition"
+                                                                title="Edit User"
+                                                            >
+                                                                <Edit size={14} />
+                                                            </button>
+                                                            {u.username !== 'admin' && (
+                                                                <button
+                                                                    onClick={() => handleDeactivateUser(u)}
+                                                                    className={`p-1.5 rounded-lg transition ${u.is_active !== false ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}
+                                                                    title={u.is_active !== false ? 'Deactivate' : 'Reactivate'}
+                                                                >
+                                                                    {u.is_active !== false ? <UserX size={14} /> : <CheckCircle size={14} />}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
+                            </div>
+                        </div>
                     ) : (
                         <div className="h-full overflow-hidden flex flex-col">
                             {/* Table */}
@@ -735,6 +956,14 @@ const AdminDashboard = () => {
                                     <table className="w-full text-left border-collapse text-sm">
                                         <thead className="bg-gray-50 border-b sticky top-0 z-10 w-full">
                                             <tr>
+                                                <th className="p-4 bg-gray-50">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                                        onChange={toggleSelectAll}
+                                                        checked={works.length > 0 && selectedWorks.length === works.length}
+                                                    />
+                                                </th>
                                                 <th className="p-4 font-semibold text-gray-600">#</th>
                                                 {[
                                                     { key: 'work_name', label: 'Work Details' },
@@ -748,8 +977,11 @@ const AdminDashboard = () => {
                                                     { key: 'total_released_amount', label: 'Released (Lakhs)' },
                                                     { key: 'amount_pending', label: 'Pending (Lakhs)' },
                                                     { key: 'probable_completion_date', label: 'Est. End' },
-
+                                                    { key: 'photos', label: 'Photos' },
                                                     { key: 'assignment', label: 'Inspection Status' },
+                                                    { key: 'user_remark', label: 'User Remark' },
+                                                    { key: 'photo_upload_date', label: 'Photo Date' },
+                                                    { key: 'reported_status', label: 'Reported Status' },
                                                 ].map((col) => (
                                                     visibleColumns[col.key] && (
                                                         <th
@@ -771,7 +1003,15 @@ const AdminDashboard = () => {
                                         </thead>
                                         <tbody className="divide-y">
                                             {works.map((work, idx) => (
-                                                <tr key={work.id} className="hover:bg-blue-50/30 transition-colors group">
+                                                <tr key={work.id} className={`transition-colors group ${selectedWorks.includes(work.id) ? 'bg-blue-50/50' : 'hover:bg-blue-50/30'}`}>
+                                                    <td className="p-4">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                                            checked={selectedWorks.includes(work.id)}
+                                                            onChange={() => toggleSelectWork(work.id)}
+                                                        />
+                                                    </td>
                                                     <td className="p-4 text-xs text-gray-400">
                                                         {(pagination.page - 1) * pagination.limit + idx + 1}
                                                     </td>
@@ -824,15 +1064,29 @@ const AdminDashboard = () => {
                                                     {visibleColumns.total_released_amount && <td className="p-4 text-sm text-gray-600">₹{work.total_released_amount?.toLocaleString()} Lakhs</td>}
                                                     {visibleColumns.amount_pending && <td className="p-4 text-sm text-red-600">₹{work.amount_pending?.toLocaleString()} Lakhs</td>}
                                                     {visibleColumns.probable_completion_date && <td className="p-4 text-sm text-gray-600">{work.probable_completion_date ? new Date(work.probable_completion_date).toLocaleDateString() : '-'}</td>}
+                                                    {visibleColumns.photos && (
+                                                        <td className="p-4">
+                                                            {work.first_thumbnail ? (
+                                                                <img
+                                                                    src={`${import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:8000'}/${work.first_thumbnail}`}
+                                                                    alt="Work photo"
+                                                                    className="w-12 h-12 rounded-lg object-cover border border-gray-200 shadow-sm cursor-pointer hover:scale-110 transition-transform"
+                                                                    onClick={() => handleViewDetails(work)}
+                                                                />
+                                                            ) : (
+                                                                <span className="text-xs text-gray-300">—</span>
+                                                            )}
+                                                        </td>
+                                                    )}
                                                     {visibleColumns.assignment && (
                                                         <td className="p-4 whitespace-nowrap">
                                                             {/* ... assignment content ... */}
                                                         </td>
                                                     )}
-                                                    {/* NOTE: I am fixing offset line issues by replacing the whole block or finding a better anchor */}
-
-
-                                                    {/* Deadline Input */}
+                                                    {visibleColumns.user_remark && <td className="p-4 text-sm text-gray-600 whitespace-pre-wrap min-w-[150px]">{work.user_remark || '-'}</td>}
+                                                    {visibleColumns.photo_upload_date && <td className="p-4 text-sm text-gray-600 whitespace-nowrap">{work.photo_upload_date ? new Date(work.photo_upload_date).toLocaleDateString() : '-'}</td>}
+                                                    {visibleColumns.reported_status && <td className="p-4 text-sm font-medium text-blue-600 whitespace-nowrap">{work.reported_status || '-'}</td>}
+                                                    {/* NOTE: I am fixing offset line issues by replacing the whole block or finding a better anchor */}                                                    {/* Deadline Input */}
                                                     {visibleColumns.inspection_deadline && (
                                                         <td className="p-4">
                                                             <input
@@ -921,7 +1175,70 @@ const AdminDashboard = () => {
                 onClose={() => setIsDrawerOpen(false)}
             />
 
-            {/* Assignment Modal */}
+            {/* User Management Modal */}
+            <UserManagementModal
+                user={editingUser}
+                isOpen={userModalOpen}
+                onClose={() => { setUserModalOpen(false); setEditingUser(null); }}
+                onSave={() => fetchUsers()}
+                filterOptions={filterOptions}
+            />
+
+            {/* Bulk Assignment Modal */}
+            {
+                bulkAssignModal && (
+                    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                        <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
+                            <h3 className="text-lg font-bold mb-4">Bulk Assign Inspection ({selectedWorks.length} works)</h3>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Select Officer/Agency</label>
+                                    <select
+                                        className="w-full border rounded-lg p-2 text-sm"
+                                        value={assignmentModal.officerId}
+                                        onChange={(e) => setAssignmentModal(prev => ({ ...prev, officerId: e.target.value }))}
+                                    >
+                                        <option value="">-- Choose Agency --</option>
+                                        {officers.map(off => (
+                                            <option key={off.id} value={off.username}>{off.username} ({off.allowed_agencies || 'All'})</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Deadline (Days from now)</label>
+                                    <input
+                                        type="number"
+                                        placeholder="e.g. 7 (Leave empty for none)"
+                                        className="w-full border rounded-lg p-2 text-sm"
+                                        value={assignmentModal.days}
+                                        onChange={(e) => setAssignmentModal(prev => ({ ...prev, days: e.target.value }))}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="mt-6 flex gap-3 justify-end">
+                                <button
+                                    onClick={() => setBulkAssignModal(false)}
+                                    className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-100 rounded-lg text-sm"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleBulkAssign}
+                                    disabled={!assignmentModal.officerId}
+                                    className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg text-sm hover:bg-indigo-700 disabled:opacity-50"
+                                >
+                                    Assign All ({selectedWorks.length})
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            {/* Target Assignment Modal */}
             {
                 assignmentModal.isOpen && (
                     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">

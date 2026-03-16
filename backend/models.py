@@ -12,6 +12,11 @@ class User(Base):
     hashed_password = Column(String)
     role = Column(String, default="officer") 
     department = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    allowed_blocks = Column(String, nullable=True)       # comma-separated, null = ALL
+    allowed_panchayats = Column(String, nullable=True)   # comma-separated, null = ALL
+    allowed_agencies = Column(String, nullable=True)     # comma-separated, null = ALL
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 class Work(Base):
     __tablename__ = "works"
@@ -60,6 +65,7 @@ class Work(Base):
     inspection_deadline = Column(DateTime, nullable=True) 
     assigned_officer = relationship("User")
     inspections = relationship("Inspection", back_populates="work")
+    work_photos = relationship("WorkPhoto", back_populates="work", order_by="WorkPhoto.uploaded_at.desc()")
 
 class Inspection(Base):
     __tablename__ = "inspections"
@@ -82,6 +88,20 @@ class InspectionPhoto(Base):
     image_path = Column(String)
     
     inspection = relationship("Inspection", back_populates="photos")
+
+class WorkPhoto(Base):
+    """Direct work-level photos (not tied to inspections)."""
+    __tablename__ = "work_photos"
+    id = Column(Integer, primary_key=True, index=True)
+    work_id = Column(Integer, ForeignKey("works.id"), index=True)
+    image_path = Column(String)       # full-size compressed image
+    thumbnail_path = Column(String)   # 300px thumbnail
+    caption = Column(Text, nullable=True)
+    category = Column(String, default="During")  # Before, During, After, Completed
+    uploaded_by = Column(String)      # username
+    uploaded_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    work = relationship("Work", back_populates="work_photos")
 
 # New Model for System-wide settings/metadata
 class SystemMetadata(Base):

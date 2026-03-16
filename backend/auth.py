@@ -50,4 +50,45 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     user = db.query(models.User).filter(models.User.username == username).first()
     if user is None:
         raise credentials_exception
+    # Reject inactive users
+    if hasattr(user, 'is_active') and not user.is_active:
+        raise HTTPException(status_code=403, detail="Account is deactivated")
     return user
+
+
+def check_work_access(user, work) -> bool:
+    """
+    Check if a user has access to a specific work based on their scope.
+    Admins have access to everything.
+    Officers are scoped by department, allowed_blocks, allowed_panchayats, and allowed_agencies.
+    """
+    if user.role == "admin":
+        return True
+    
+    # Check department
+    if user.department and work.department:
+        if user.department.strip().lower() != work.department.strip().lower():
+            return False
+    
+    # Check block scope
+    if user.allowed_blocks:
+        allowed = [b.strip().lower() for b in user.allowed_blocks.split(",") if b.strip()]
+        if allowed and work.block:
+            if work.block.strip().lower() not in allowed:
+                return False
+    
+    # Check panchayat scope
+    if user.allowed_panchayats:
+        allowed = [p.strip().lower() for p in user.allowed_panchayats.split(",") if p.strip()]
+        if allowed and work.panchayat:
+            if work.panchayat.strip().lower() not in allowed:
+                return False
+    
+    # Check agency scope
+    if hasattr(user, 'allowed_agencies') and user.allowed_agencies:
+        allowed = [a.strip().lower() for a in user.allowed_agencies.split(",") if a.strip()]
+        if allowed and work.agency_name:
+            if work.agency_name.strip().lower() not in allowed:
+                return False
+    
+    return True

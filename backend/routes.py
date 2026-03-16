@@ -12,6 +12,7 @@ import shutil
 import os
 import pandas as pd
 from io import BytesIO
+import image_utils
 
 router = APIRouter()
 
@@ -497,7 +498,81 @@ async def get_works(
     # Sorting
     query = apply_sorting(query, sort_by, sort_order)
     
-    return query.offset(skip).limit(limit).all()
+    works = query.offset(skip).limit(limit).all()
+    
+    # Fetch first thumbnail for each work (batch query)
+    work_ids = [w.id for w in works]
+    first_photos = {}
+    latest_inspections = {}
+    if work_ids:
+        from sqlalchemy import func
+        subq = db.query(
+            models.WorkPhoto.work_id,
+            func.min(models.WorkPhoto.id).label('first_id')
+        ).filter(models.WorkPhoto.work_id.in_(work_ids)).group_by(models.WorkPhoto.work_id).subquery()
+        
+        photos = db.query(models.WorkPhoto).join(
+            subq, models.WorkPhoto.id == subq.c.first_id
+        ).all()
+        
+        for p in photos:
+            first_photos[p.work_id] = p.thumbnail_path
+            
+        subq_insp = db.query(
+            models.Inspection.work_id,
+            func.max(models.Inspection.id).label('latest_id')
+        ).filter(models.Inspection.work_id.in_(work_ids)).group_by(models.Inspection.work_id).subquery()
+        
+        inspections = db.query(models.Inspection).join(
+            subq_insp, models.Inspection.id == subq_insp.c.latest_id
+        ).all()
+        
+        for i in inspections:
+            latest_inspections[i.work_id] = {
+                "remark": i.remarks,
+                "date": i.inspection_date.isoformat() if i.inspection_date else None,
+                "status": i.status_at_time
+            }
+            
+    # Build response with thumbnail info
+    result = []
+    for w in works:
+        work_dict = {
+            "id": w.id,
+            "work_code": w.work_code,
+            "department": w.department,
+            "financial_year": w.financial_year,
+            "block": w.block,
+            "panchayat": w.panchayat,
+            "work_name": w.work_name,
+            "work_name_brief": w.work_name_brief,
+            "as_number": w.as_number,
+            "sanctioned_amount": w.sanctioned_amount,
+            "sanctioned_date": w.sanctioned_date.isoformat() if w.sanctioned_date else None,
+            "total_released_amount": w.total_released_amount,
+            "amount_pending": w.amount_pending,
+            "agency_name": w.agency_name,
+            "probable_completion_date": w.probable_completion_date.isoformat() if w.probable_completion_date else None,
+            "current_status": w.current_status,
+            "work_percentage": w.work_percentage,
+            "remark": w.remark,
+            "admin_remarks": w.admin_remarks,
+            "inspection_date": w.inspection_date.isoformat() if w.inspection_date else None,
+            "latitude": w.latitude,
+            "longitude": w.longitude,
+            "assigned_officer_id": w.assigned_officer_id,
+            "assignment_status": w.assignment_status,
+            "inspection_deadline": w.inspection_deadline.isoformat() if w.inspection_deadline else None,
+            "assigned_officer": {"id": w.assigned_officer.id, "username": w.assigned_officer.username} if w.assigned_officer else None,
+            "first_thumbnail": first_photos.get(w.id),
+            "last_updated": (w.inspection_date or w.sanctioned_date or datetime.utcnow()).isoformat() if True else None,
+            "user_remark": latest_inspections.get(w.id, {}).get("remark"),
+            "photo_upload_date": latest_inspections.get(w.id, {}).get("date"),
+            "reported_status": latest_inspections.get(w.id, {}).get("status"),
+        }
+        result.append(work_dict)
+    
+    return result
 
 @router.get("/works/export")
 async def export_works(
@@ -575,6 +650,94 @@ async def export_works(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Export Failed: {str(e)}")
 
+@router.get("/reports/inspection-status")
+async def export_inspection_status(db: Session = Depends(get_db)):
+    try:
+        works = db.query(models.Work).all()
+        work_ids = [w.id for w in works]
+        
+        from sqlalchemy import func
+        photo_counts = dict(
+            db.query(models.WorkPhoto.work_id, func.count(models.WorkPhoto.id))
+            .filter(models.WorkPhoto.work_id.in_(work_ids))
+            .group_by(models.WorkPhoto.work_id)
+            .all()
+        ) if work_ids else {}
+        
+        latest_inspections = dict(
+            db.query(models.Inspection.work_id, func.max(models.Inspection.inspection_date))
+            .filter(models.Inspection.work_id.in_(work_ids))
+            .group_by(models.Inspection.work_id)
+            .all()
+        ) if work_ids else {}
+        
+        data = []
+        for w in works:
+            if not w.assigned_officer_id:
+                continue 
+            
+            p_count = photo_counts.get(w.id, 0)
+            inspection_date = latest_inspections.get(w.id)
+            data.append({
+                "Agency": w.agency_name or "Unknown",
+                "Work Code": w.work_code,
+                "Assigned User": w.assigned_officer.username if w.assigned_officer else "Unknown",
+                "Has Photo": "Yes" if p_count > 0 else "No",
+                "Photo Count": p_count,
+                "Latest Inspection Date": inspection_date.isoformat() if inspection_date else None
+            })
+            
+        df = pd.DataFrame(data)
+        
+        if df.empty:
+            summary_df = pd.DataFrame(columns=["Agency", "Total Assigned", "With Photos", "Pending Photos"])
+        else:
+            summary = df.groupby("Agency").agg(
+                Total_Assigned=("Work Code", "count"),
+                With_Photos=("Has Photo", lambda x: (x == "Yes").sum()),
+            ).reset_index()
+            summary["Pending_Photos"] = summary["Total_Assigned"] - summary["With_Photos"]
+            summary_df = summary.rename(columns={
+                "Total_Assigned": "Total Assigned", 
+                "With_Photos": "With Photos",
+                "Pending_Photos": "Pending Photos"
+            })
+        
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            summary_df.to_excel(writer, index=False, sheet_name='Agency Summary')
+            if not df.empty:
+                df.to_excel(writer, index=False, sheet_name='Detailed Works')
+            
+            for sheetname in writer.sheets:
+                worksheet = writer.sheets[sheetname]
+                from openpyxl.styles import Alignment
+                for row in worksheet.iter_rows():
+                    for cell in row:
+                        cell.alignment = Alignment(wrap_text=True, vertical='top')
+                
+                for column in worksheet.columns:
+                    max_length = 0
+                    column_letter = column[0].column_letter
+                    for cell in column:
+                        try:
+                            if len(str(cell.value)) > max_length:
+                                max_length = len(str(cell.value))
+                        except: pass
+                    worksheet.column_dimensions[column_letter].width = min(max_length + 2, 50)
+
+        output.seek(0)
+        
+        return Response(
+            content=output.getvalue(), 
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+            headers={"Content-Disposition": f"attachment; filename=inspection_status_report_{datetime.now().strftime('%Y%m%d')}.xlsx"}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Report Export Failed: {str(e)}")
+
 
 @router.get("/works/{work_id}")
 async def get_work(work_id: int, db: Session = Depends(get_db)):
@@ -615,20 +778,25 @@ async def create_inspection(
         
         # Save Photos
         for photo in photos:
-            file_extension = photo.filename.split(".")[-1]
-            filename = f"insp_{new_inspection.id}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{photo.filename}"
-            os.makedirs("uploads", exist_ok=True)
-            file_path = f"uploads/{filename}"
+            # Read file bytes for processing
+            file_bytes = await photo.read()
             
-            with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(photo.file, buffer)
-                
-            new_photo = models.Photo(
+            # Use image_utils for processing (compression, thumbnail, orientation)
+            full_path, thumb_path = image_utils.process_upload(file_bytes, photo.filename)
+            
+            # Map status to category
+            category = "During"
+            if status == "Completed":
+                category = "Completed"
+            elif status == "Not Started":
+                category = "Before"
+
+            new_photo = models.WorkPhoto(
                 work_id=work_id,
-                inspection_id=new_inspection.id,
-                image_path=file_path,
-                gps_lat=latitude,
-                gps_long=longitude,
+                image_path=full_path,
+                thumbnail_path=thumb_path,
+                caption=f"Status: {status} | Remarks: {remarks}",
+                category=category,
                 uploaded_by=current_user.username
             )
             db.add(new_photo)
@@ -730,13 +898,6 @@ async def update_work_admin(
     if not work:
         raise HTTPException(status_code=404, detail="Work not found")
         
-    # Only update if provided (handle nulls if user wants to clear? for now assume frontend sends current val or new val)
-    # Actually, allow clearing by sending None? Pydantic Optional defaults to None if missing. 
-    # But if user sends null explicitly? 
-    # Let's trust the frontend sends what it wants to set.
-    
-    # Check if field is in update dict to distinguish between "not sent" and "sent as null"
-    # But for simplicity:
     if update.inspection_deadline is not None:
         work.inspection_deadline = update.inspection_deadline
     if update.admin_remarks is not None:
@@ -744,3 +905,291 @@ async def update_work_admin(
         
     db.commit()
     return {"message": "Updated"}
+
+class BulkAssignRequest(BaseModel):
+    work_ids: List[int]
+    username: str
+    deadline_days: Optional[int] = None
+
+@router.put("/works/bulk-assign")
+async def bulk_assign_works(
+    req: BulkAssignRequest,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+        
+    target_user = db.query(models.User).filter(models.User.username == req.username).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    works = db.query(models.Work).filter(models.Work.id.in_(req.work_ids)).all()
+    deadline = None
+    if req.deadline_days:
+        deadline = datetime.utcnow() + timedelta(days=req.deadline_days)
+        
+    for w in works:
+        w.assigned_officer_id = target_user.id
+        w.assignment_status = "Assigned"
+        if deadline:
+            w.inspection_deadline = deadline
+            
+    db.commit()
+    return {"message": f"Successfully assigned {len(works)} works to {target_user.username}"}
+
+# =============================================
+# WORK PHOTOS - Upload, List, Delete
+# =============================================
+
+@router.post("/works/{work_id}/photos")
+async def upload_work_photos(
+    work_id: int,
+    photos: List[UploadFile] = File(...),
+    category: str = Form("During"),
+    caption: str = Form(""),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Upload one or more photos for a work. Compresses server-side."""
+    import image_utils
+    
+    work = db.query(models.Work).filter(models.Work.id == work_id).first()
+    if not work:
+        raise HTTPException(status_code=404, detail="Work not found")
+    
+    # Check access
+    if not auth.check_work_access(current_user, work):
+        raise HTTPException(status_code=403, detail="You don't have access to this work")
+    
+    results = []
+    for photo in photos:
+        try:
+            file_bytes = await photo.read()
+            full_path, thumb_path = image_utils.process_upload(file_bytes, photo.filename)
+            
+            new_photo = models.WorkPhoto(
+                work_id=work_id,
+                image_path=full_path,
+                thumbnail_path=thumb_path,
+                caption=caption,
+                category=category,
+                uploaded_by=current_user.username
+            )
+            db.add(new_photo)
+            db.flush()
+            
+            results.append({
+                "id": new_photo.id,
+                "image_path": full_path,
+                "thumbnail_path": thumb_path,
+                "size_kb": round(image_utils.get_file_size_kb(full_path), 1)
+            })
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            results.append({"error": f"Failed to process {photo.filename}: {str(e)}"})
+    
+    db.commit()
+    return {"message": f"Uploaded {len([r for r in results if 'id' in r])} photo(s)", "photos": results}
+
+
+@router.get("/works/{work_id}/photos")
+async def get_work_photos(
+    work_id: int,
+    category: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """List all photos for a work, optionally filtered by category."""
+    work = db.query(models.Work).filter(models.Work.id == work_id).first()
+    if not work:
+        raise HTTPException(status_code=404, detail="Work not found")
+    
+    query = db.query(models.WorkPhoto).filter(models.WorkPhoto.work_id == work_id)
+    if category:
+        query = query.filter(models.WorkPhoto.category == category)
+    
+    photos = query.order_by(models.WorkPhoto.uploaded_at.desc()).all()
+    
+    # Build base URL for serving
+    return [
+        {
+            "id": p.id,
+            "image_path": p.image_path,
+            "thumbnail_path": p.thumbnail_path,
+            "caption": p.caption,
+            "category": p.category,
+            "uploaded_by": p.uploaded_by,
+            "uploaded_at": p.uploaded_at.isoformat() if p.uploaded_at else None
+        }
+        for p in photos
+    ]
+
+
+@router.delete("/works/{work_id}/photos/{photo_id}")
+async def delete_work_photo(
+    work_id: int,
+    photo_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a photo. Admin only."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can delete photos")
+    
+    photo = db.query(models.WorkPhoto).filter(
+        models.WorkPhoto.id == photo_id,
+        models.WorkPhoto.work_id == work_id
+    ).first()
+    
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    
+    # Delete files from disk
+    for path in [photo.image_path, photo.thumbnail_path]:
+        if path and os.path.exists(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+    
+    db.delete(photo)
+    db.commit()
+    return {"message": "Photo deleted"}
+
+
+# =============================================
+# USER MANAGEMENT - CRUD
+# =============================================
+
+class UserCreate(BaseModel):
+    username: str
+    password: str
+    role: str = "officer"
+    department: Optional[str] = None
+    allowed_blocks: Optional[str] = None
+    allowed_panchayats: Optional[str] = None
+    allowed_agencies: Optional[str] = None
+
+class UserUpdate(BaseModel):
+    role: Optional[str] = None
+    department: Optional[str] = None
+    allowed_blocks: Optional[str] = None
+    allowed_panchayats: Optional[str] = None
+    allowed_agencies: Optional[str] = None
+    is_active: Optional[bool] = None
+    new_password: Optional[str] = None
+
+
+@router.get("/users")
+async def list_users(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """List all users. Admin only."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can manage users")
+    
+    users = db.query(models.User).order_by(models.User.id).all()
+    return [
+        {
+            "id": u.id,
+            "username": u.username,
+            "role": u.role,
+            "department": u.department,
+            "is_active": u.is_active if hasattr(u, 'is_active') else True,
+            "allowed_blocks": u.allowed_blocks if hasattr(u, 'allowed_blocks') else None,
+            "allowed_panchayats": u.allowed_panchayats if hasattr(u, 'allowed_panchayats') else None,
+            "allowed_agencies": u.allowed_agencies if hasattr(u, 'allowed_agencies') else None,
+            "created_at": u.created_at.isoformat() if hasattr(u, 'created_at') and u.created_at else None
+        }
+        for u in users
+    ]
+
+
+@router.post("/users")
+async def create_user(
+    user_data: UserCreate,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new user. Admin only."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can create users")
+    
+    # Check if username exists
+    existing = db.query(models.User).filter(models.User.username == user_data.username).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    
+    new_user = models.User(
+        username=user_data.username,
+        hashed_password=auth.get_password_hash(user_data.password),
+        role=user_data.role,
+        department=user_data.department,
+        allowed_blocks=user_data.allowed_blocks,
+        allowed_panchayats=user_data.allowed_panchayats,
+        allowed_agencies=user_data.allowed_agencies
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    return {"message": f"User '{user_data.username}' created", "id": new_user.id}
+
+
+@router.put("/users/{user_id}")
+async def update_user(
+    user_id: int,
+    user_data: UserUpdate,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update a user's details. Admin only."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can update users")
+    
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if user_data.role is not None:
+        user.role = user_data.role
+    if user_data.department is not None:
+        user.department = user_data.department
+    if user_data.allowed_blocks is not None:
+        user.allowed_blocks = user_data.allowed_blocks if user_data.allowed_blocks else None
+    if user_data.allowed_panchayats is not None:
+        user.allowed_panchayats = user_data.allowed_panchayats if user_data.allowed_panchayats else None
+    if user_data.allowed_agencies is not None:
+        user.allowed_agencies = user_data.allowed_agencies if user_data.allowed_agencies else None
+    if user_data.is_active is not None:
+        user.is_active = user_data.is_active
+    if user_data.new_password:
+        user.hashed_password = auth.get_password_hash(user_data.new_password)
+    
+    db.commit()
+    return {"message": f"User '{user.username}' updated"}
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(
+    user_id: int,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Deactivate a user (soft delete). Admin only."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can delete users")
+    
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if user.username == "admin":
+        raise HTTPException(status_code=400, detail="Cannot deactivate the admin account")
+    
+    user.is_active = False
+    db.commit()
+    return {"message": f"User '{user.username}' deactivated"}
+
