@@ -152,7 +152,7 @@ const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
                             {displayWork.current_status}
                         </span>
                         <span className="text-xs text-gray-500">
-                            Last Updated: {new Date(displayWork.last_updated).toLocaleDateString()}
+                            Last Updated: {new Date(displayWork.last_updated + 'Z').toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                         </span>
                     </div>
 
@@ -239,7 +239,7 @@ const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
                                         {/* Date */}
                                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1">
                                             <p className="text-white text-[9px] truncate">
-                                                {photo.uploaded_at ? new Date(photo.uploaded_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : ''}
+                                                {photo.uploaded_at ? new Date(photo.uploaded_at + 'Z').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
                                             </p>
                                         </div>
                                     </div>
@@ -270,8 +270,8 @@ const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
 
                                         <div className="flex justify-between items-start">
                                             <div>
-                                                <p className="font-bold text-gray-800 text-sm">{new Date(event.date).toLocaleDateString()}</p>
-                                                <p className="text-xs text-gray-500">{new Date(event.date).toLocaleTimeString()}</p>
+                                                <p className="font-bold text-gray-800 text-sm">{new Date(event.date + 'Z').toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</p>
+                                                <p className="text-xs text-gray-500">{new Date(event.date + 'Z').toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
                                             </div>
                                             <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${event.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
                                                 }`}>

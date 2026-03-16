@@ -26,6 +26,7 @@ const OfficerDashboard = () => {
     // Form State
     const [photo, setPhoto] = useState(null);
     const [status, setStatus] = useState('In Progress');
+    const [photoCategory, setPhotoCategory] = useState('During'); // NEW
     const [remarks, setRemarks] = useState('');
     const [declarationChecked, setDeclarationChecked] = useState(false);
     const [location, setLocation] = useState(null);
@@ -146,6 +147,7 @@ const OfficerDashboard = () => {
         setSubmitting(true);
         const formData = new FormData();
         formData.append('status', status);
+        formData.append('photo_category', photoCategory); // NEW
         formData.append('latitude', location?.latitude || 0);
         formData.append('longitude', location?.longitude || 0);
         formData.append('photos', photo);
@@ -165,6 +167,7 @@ const OfficerDashboard = () => {
                 await saveOfflineUpdate({
                     workId: selectedWork.id,
                     status,
+                    photoCategory, // NEW
                     remarks, // Save offline too
                     latitude: location?.latitude || 0,
                     longitude: location?.longitude || 0,
@@ -195,6 +198,7 @@ const OfficerDashboard = () => {
         for (const item of pending) {
             const formData = new FormData();
             formData.append('status', item.status);
+            formData.append('photo_category', item.photoCategory || 'During'); // NEW
             formData.append('latitude', item.latitude);
             formData.append('longitude', item.longitude);
             // Append photo with filename
@@ -258,6 +262,16 @@ const OfficerDashboard = () => {
                                 <option>Completed</option>
                                 <option>Stalled</option>
                                 <option>Not Started</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Photo Category</label>
+                            <select className="w-full border p-3 rounded-lg bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none" value={photoCategory} onChange={e => setPhotoCategory(e.target.value)}>
+                                <option value="Before">Before</option>
+                                <option value="During">During</option>
+                                <option value="After">After</option>
+                                <option value="Completed">Completed</option>
                             </select>
                         </div>
 

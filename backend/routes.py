@@ -763,6 +763,7 @@ async def get_work(work_id: int, db: Session = Depends(get_db)):
 async def create_inspection(
     work_id: int,
     status: str = Form(...),
+    photo_category: str = Form("During"),
     latitude: float = Form(...),
     longitude: float = Form(...),
     remarks: str = Form(""),
@@ -796,19 +797,12 @@ async def create_inspection(
             # Use image_utils for processing (compression, thumbnail, orientation)
             full_path, thumb_path = image_utils.process_upload(file_bytes, photo.filename)
             
-            # Map status to category
-            category = "During"
-            if status == "Completed":
-                category = "Completed"
-            elif status == "Not Started":
-                category = "Before"
-
             new_photo = models.WorkPhoto(
                 work_id=work_id,
                 image_path=full_path,
                 thumbnail_path=thumb_path,
                 caption=f"Status: {status} | Remarks: {remarks}",
-                category=category,
+                category=photo_category,
                 uploaded_by=current_user.username
             )
             db.add(new_photo)
