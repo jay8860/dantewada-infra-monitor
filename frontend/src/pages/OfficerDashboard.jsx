@@ -52,28 +52,20 @@ const OfficerDashboard = () => {
     const fetchWorks = async () => {
         setLoading(true);
         try {
-            // Fetch ALL works to allow client-side search across everything
-            // Increase limit to ensuring we get everything
-            const response = await api.get('/works', { params: { limit: 10000 } });
-            const data = response.data;
-            setAllWorks(data);
+            // Fetch only explicitly assigned works for "My Inspections" tab
+            const assignedResp = await api.get('/works/my-assignments');
+            setAssignedWorks(assignedResp.data);
 
-            // Filter for 'My Assignments'
-            if (user?.id) {
-                const userAgencies = user.allowed_agencies ? user.allowed_agencies.split(',').map(a => a.trim()) : [];
-                const myTasks = data.filter(w => {
-                    const assignedById = w.assigned_officer_id == user.id;
-                    const matchesAgency = userAgencies.includes(w.agency_name);
-                    return assignedById || matchesAgency;
-                });
-                setAssignedWorks(myTasks);
-            }
+            // Fetch agency-filtered works for "All Works" tab (backend applies privacy filter)
+            const allResp = await api.get('/works', { params: { limit: 2000 } });
+            setAllWorks(allResp.data);
         } catch (error) {
             console.error("Fetch works failed", error);
         } finally {
             setLoading(false);
         }
     };
+
 
     const checkPending = async () => {
         const pending = await getPendingUpdates();

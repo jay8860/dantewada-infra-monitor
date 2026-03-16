@@ -531,6 +531,38 @@ def apply_sorting(query, sort_by, sort_order):
             query = query.order_by(col.asc())
     return query
 
+@router.get("/works/my-assignments")
+async def get_my_assignments(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Return only works explicitly assigned to the current officer via WorkAssignment table or assigned_officer_id."""
+    from sqlalchemy import or_
+    assigned_ids = db.query(models.WorkAssignment.work_id).filter(
+        models.WorkAssignment.user_id == current_user.id
+    ).all()
+    assigned_ids = [r[0] for r in assigned_ids]
+
+    query = db.query(models.Work).filter(
+        or_(
+            models.Work.assigned_officer_id == current_user.id,
+            models.Work.id.in_(assigned_ids)
+        )
+    ).order_by(models.Work.id)
+
+    works = query.all()
+
+    result = []
+    for w in works:
+        photos = db.query(models.Photo).filter(models.Photo.work_id == w.id).all()
+        assigned_officer = db.query(models.User).filter(models.User.id == w.assigned_officer_id).first() if w.assigned_officer_id else None
+        work_dict = {c.name: getattr(w, c.name) for c in w.__table__.columns}
+        work_dict["photos"] = [{"id": p.id, "image_path": p.image_path, "thumbnail_path": p.thumbnail_path, "category": p.category, "caption": p.caption, "uploaded_at": str(p.uploaded_at) if p.uploaded_at else None, "uploaded_by": p.uploaded_by} for p in photos]
+        work_dict["assigned_officer"] = {"id": assigned_officer.id, "username": assigned_officer.username} if assigned_officer else None
+        result.append(work_dict)
+
+    return result
+
 @router.get("/works")
 async def get_works(
     response: Response,
