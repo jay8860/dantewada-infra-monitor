@@ -62,26 +62,42 @@ try:
         os.makedirs(UPLOAD_DIR)
     app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
+    # Include Router (Priority over SPA catch-all)
+    app.include_router(router, prefix="/api")
+
     # Mount frontend static files
     STATIC_DIR = os.path.join(os.getcwd(), "static")
     if os.path.exists(STATIC_DIR):
-        app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
+        # 1. Mount assets directory
+        assets_path = os.path.join(STATIC_DIR, "assets")
+        if os.path.exists(assets_path):
+            app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
 
-        # Catch-all for React Router & Root
         from fastapi.responses import FileResponse
+
+        # 2. Specific route for root index
         @app.get("/", include_in_schema=False)
         async def serve_index():
             return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 
+        # 3. Catch-all for everything else (SPA routing + Root assets)
         @app.get("/{full_path:path}", include_in_schema=False)
         async def serve_spa(full_path: str):
-            # If it's an API route that didn't match the router, it's a 404
-            if full_path.startswith("api/"):
-                return {"error": "API route not found"}
-            # Serve index.html for React Router
+            # API & Uploads should have been handled by their respective mounts/routers
+            # If we are here, it's either a rogue API call or a static file/SPA route
+            if full_path.startswith("api/") or full_path.startswith("uploads/"):
+                return {"error": "Not Found"}
+
+            # Try to see if it's a file in the static root (e.g. vite.svg, favicon.ico)
+            file_path = os.path.join(STATIC_DIR, full_path)
+            if os.path.isfile(file_path):
+                 return FileResponse(file_path)
+
+            # Otherwise, fallback to index.html for React Router
             idx_path = os.path.join(STATIC_DIR, "index.html")
             if os.path.exists(idx_path):
                 return FileResponse(idx_path)
+
             return {"message": "Frontend not found, but API is alive"}
 
     # Scheduler
@@ -110,8 +126,6 @@ try:
         except Exception as e:
             logger.critical(f"Startup Event Error: {e}")
 
-    # Include Router
-    app.include_router(router, prefix="/api")
 
 except Exception as e:
     STARTUP_ERROR = f"{str(e)}\n{traceback.format_exc()}"
