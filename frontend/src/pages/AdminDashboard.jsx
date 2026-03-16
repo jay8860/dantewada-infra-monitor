@@ -52,7 +52,7 @@ const AdminDashboard = () => {
         total_released_amount: true,
         amount_pending: true,
         probable_completion_date: false,
-        photos: false,
+        photos: true,
         assignment: true,
         user_remark: true,
         photo_upload_date: true,
