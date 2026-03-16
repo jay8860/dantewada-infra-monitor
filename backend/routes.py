@@ -27,11 +27,23 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token = auth.create_access_token(data={"sub": user.username})
-    return {"access_token": access_token, "token_type": "bearer", "role": user.role}
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer", 
+        "role": user.role,
+        "id": user.id,
+        "allowed_agencies": user.allowed_agencies
+    }
 
 @router.get("/users/me")
 async def read_users_me(current_user: models.User = Depends(auth.get_current_user)):
-    return {"username": current_user.username, "role": current_user.role, "department": current_user.department}
+    return {
+        "id": current_user.id,
+        "username": current_user.username, 
+        "role": current_user.role, 
+        "department": current_user.department,
+        "allowed_agencies": current_user.allowed_agencies
+    }
 
 # --- Officers ---
 @router.get("/officers")

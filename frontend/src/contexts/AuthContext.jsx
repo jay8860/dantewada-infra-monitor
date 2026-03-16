@@ -14,7 +14,12 @@ export const AuthProvider = ({ children }) => {
             try {
                 const decoded = jwtDecode(token);
                 // We should verify valid session with backend, but for now decode is enough to restore state
-                setUser({ username: decoded.sub, role: localStorage.getItem('role') }); // role saved separately for convenience
+                setUser({ 
+                    username: decoded.sub, 
+                    role: localStorage.getItem('role'),
+                    id: localStorage.getItem('user_id') ? parseInt(localStorage.getItem('user_id')) : null,
+                    allowed_agencies: localStorage.getItem('allowed_agencies') || ''
+                });
             } catch (e) {
                 console.error("Invalid token", e);
                 localStorage.removeItem('token');
@@ -34,13 +39,20 @@ export const AuthProvider = ({ children }) => {
                     'Content-Type': 'application/x-www-form-urlencoded'
                 }
             });
-            const { access_token, role } = response.data;
+            const { access_token, role, id, allowed_agencies } = response.data;
 
             localStorage.setItem('token', access_token);
             localStorage.setItem('role', role);
+            if (id) localStorage.setItem('user_id', id);
+            if (allowed_agencies) localStorage.setItem('allowed_agencies', allowed_agencies);
 
             const decoded = jwtDecode(access_token);
-            setUser({ username: decoded.sub, role: role });
+            setUser({ 
+                username: decoded.sub, 
+                role: role, 
+                id: id, 
+                allowed_agencies: allowed_agencies 
+            });
             return true;
         } catch (error) {
             console.error("Login failed", error);
@@ -51,6 +63,8 @@ export const AuthProvider = ({ children }) => {
     const logout = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('role');
+        localStorage.removeItem('user_id');
+        localStorage.removeItem('allowed_agencies');
         setUser(null);
     };
 
