@@ -394,7 +394,7 @@ async def get_work_locations(
     ]
 
 # --- Filter Helper ---
-def build_works_query(db, department, block, panchayat, status, agency, year, search, start_date=None, end_date=None):
+def build_works_query(db, user, department, block, panchayat, status, agency, year, search, start_date=None, end_date=None):
     query = db.query(models.Work).options(joinedload(models.Work.assigned_officer))
     
     # helper for list filtering
@@ -447,6 +447,26 @@ def build_works_query(db, department, block, panchayat, status, agency, year, se
                      query = query.filter(special_cond)
             else:
                 query = query.filter(models.Work.block.in_(clean_blocks))
+
+    # --- PRIVACY FILTER ---
+    if user and user.role != "admin":
+        if user.allowed_agencies:
+            agencies = [a.strip() for a in user.allowed_agencies.split(',') if a.strip()]
+            if agencies:
+                query = query.filter(models.Work.agency_name.in_(agencies))
+        else:
+            # Check for works explicitly assigned to this user via work_assignments table
+            user_assignment_ids = db.query(models.WorkAssignment.work_id).filter(models.WorkAssignment.user_id == user.id).all()
+            assigned_ids = [r[0] for r in user_assignment_ids]
+            
+            # Combine legacy assigned_officer_id and new WorkAssignment table
+            from sqlalchemy import or_
+            query = query.filter(
+                or_(
+                    models.Work.assigned_officer_id == user.id,
+                    models.Work.id.in_(assigned_ids)
+                )
+            )
 
     if search:
         search_term = f"%{search}%"
@@ -501,9 +521,10 @@ async def get_works(
     end_date: Optional[str] = Query(None),
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
 ):
-    query = build_works_query(db, department, block, panchayat, status, agency, year, search, start_date, end_date)
+    query = build_works_query(db, current_user, department, block, panchayat, status, agency, year, search, start_date, end_date)
         
     total_count = query.count()
     response.headers["X-Total-Count"] = str(total_count)
@@ -601,10 +622,11 @@ async def export_works(
     search: Optional[str] = None,
     sort_by: Optional[str] = None,
     sort_order: Optional[str] = "asc",
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
 ):
     try:
-        query = build_works_query(db, department, block, panchayat, status, agency, year, search)
+        query = build_works_query(db, current_user, department, block, panchayat, status, agency, year, search)
         query = apply_sorting(query, sort_by, sort_order)
         results = query.all()
         print(f"DEBUG: Export found {len(results)} rows")
@@ -677,11 +699,12 @@ async def export_works_pdf(
     search: Optional[str] = None,
     sort_by: Optional[str] = None,
     sort_order: Optional[str] = "asc",
+    current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db)
 ):
     try:
         # 1. Fetch filtered works
-        query = build_works_query(db, department, block, panchayat, status, agency, year, search)
+        query = build_works_query(db, current_user, department, block, panchayat, status, agency, year, search)
         query = apply_sorting(query, sort_by, sort_order)
         # Limit to prevent massive un-renderable PDFs
         works = query.limit(500).all()
@@ -836,6 +859,8 @@ async def create_inspection(
     latitude: float = Form(...),
     longitude: float = Form(...),
     remarks: str = Form(""),
+    inspector_name: str = Form(""),
+    inspector_designation: str = Form(""),
     photos: List[UploadFile] = File(...),
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db)
@@ -846,9 +871,12 @@ async def create_inspection(
             raise HTTPException(status_code=404, detail="Work not found")
             
         # Create Inspection Record
+        final_inspector_name = inspector_name if inspector_name else current_user.username
+        
         new_inspection = models.Inspection(
             work_id=work_id,
-            inspector_name=current_user.username,
+            inspector_name=final_inspector_name,
+            inspector_designation=inspector_designation,
             status_at_time=status,
             remarks=remarks,
             latitude=latitude,
@@ -918,7 +946,7 @@ async def get_work_timeline(
     return timeline
 
 class AssignRequest(BaseModel):
-    officer_id: int
+    officer_ids: List[int]
     deadline_days: Optional[int] = None
 
 @router.post("/works/{work_id}/assign")
@@ -935,22 +963,36 @@ async def assign_work(
     if not work:
         raise HTTPException(status_code=404, detail="Work not found")
         
-    officer = db.query(models.User).filter(models.User.id == payload.officer_id, models.User.role == "officer").first()
-    if not officer:
-        raise HTTPException(status_code=404, detail="Officer not found")
-        
-    work.assigned_officer_id = payload.officer_id
-    work.assignment_status = "Pending"
-    
+    # Clear existing assignments for this work to prevent duplicates or provide clean state
+    db.query(models.WorkAssignment).filter(models.WorkAssignment.work_id == work_id).delete()
+
+    deadline = None
     if payload.deadline_days:
-        work.inspection_deadline = datetime.utcnow() + timedelta(days=payload.deadline_days)
+        deadline = datetime.utcnow() + timedelta(days=payload.deadline_days)
+        work.inspection_deadline = deadline
     else:
-        work.inspection_deadline = None # Or default?
+        work.inspection_deadline = None
+
+    for o_id in payload.officer_ids:
+        # Check if officer exists
+        off = db.query(models.User).filter(models.User.id == o_id).first()
+        if off:
+            new_assign = models.WorkAssignment(
+                work_id=work_id,
+                user_id=o_id,
+                deadline=deadline
+            )
+            db.add(new_assign)
+    
+    # Keep legacy field for backward compatibility or primary agency reference
+    if payload.officer_ids:
+        work.assigned_officer_id = payload.officer_ids[0]
         
+    work.assignment_status = "Assigned"
     work.last_updated = datetime.utcnow()
     db.commit()
     
-    return {"message": f"Work assigned to {officer.username}"}
+    return {"message": "Work assigned successfully"}
 # ... existing code ...
 
 from pydantic import BaseModel
@@ -983,7 +1025,7 @@ async def update_work_admin(
 
 class BulkAssignRequest(BaseModel):
     work_ids: List[int]
-    username: str
+    officer_ids: List[int]
     deadline_days: Optional[int] = None
 
 @router.put("/works/bulk-assign")
@@ -995,7 +1037,7 @@ async def bulk_assign_works(
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
         
-    target_user = db.query(models.User).filter(models.User.username == req.username).first()
+    target_user = db.query(models.User).filter(models.User.id == req.officer_id).first()
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
         

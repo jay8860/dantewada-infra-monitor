@@ -1,0 +1,26 @@
+INFO:     Will watch for changes in these directories: ['/Users/jayantnahata/Desktop/Gemini Anti Gravity/dantewada_work_monitoring/backend']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [68245] using StatReload
+CRITICAL:main:CRITICAL IMPORT ERROR: No module named 'jose'
+Traceback (most recent call last):
+  File "/Users/jayantnahata/Desktop/Gemini Anti Gravity/dantewada_work_monitoring/backend/main.py", line 59, in <module>
+    import init_admin
+  File "/Users/jayantnahata/Desktop/Gemini Anti Gravity/dantewada_work_monitoring/backend/init_admin.py", line 2, in <module>
+    import models, auth
+  File "/Users/jayantnahata/Desktop/Gemini Anti Gravity/dantewada_work_monitoring/backend/auth.py", line 3, in <module>
+    from jose import JWTError, jwt
+ModuleNotFoundError: No module named 'jose'
+
+INFO:     Started server process [68438]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:55293 - "POST /api/token HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55304 - "POST /api/token HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55312 - "GET /docs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55312 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55367 - "POST /api/token HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55372 - "GET /api/debug HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55372 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55382 - "GET /api/debug HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55411 - "POST /api/token HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55384 - "GET /api/health HTTP/1.1" 200 OK

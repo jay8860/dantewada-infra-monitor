@@ -93,13 +93,8 @@ def seed_users():
         for agency_name in agencies_in_db:
             username = AGENCY_MAPPING.get(agency_name)
             
-            if not username and "Jila nirman samiti" in agency_name:
-                import re
-                match = re.search(r'\((.*?)\)', agency_name)
-                suffix = match.group(1).lower().replace(" ", "").replace("dantewada", "dnt") if match else str(created_count)
-                username = f"jns_{suffix}"
-            elif not username and "Jilla nirman samiti" in agency_name:
-                username = "jns_eewrd"
+            if not username and ("Jila nirman samiti" in agency_name or "Jilla nirman samiti" in agency_name):
+                username = "jns"
                 
             if not username:
                 username = "".join([c for c in agency_name.lower() if c.isalnum()])[:12]

@@ -59,7 +59,7 @@ const AdminDashboard = () => {
         photo_upload_date: true,
         reported_status: true
     });
-    const [assignmentModal, setAssignmentModal] = useState({ isOpen: false, workId: null, officerId: '', days: '' });
+    const [assignmentModal, setAssignmentModal] = useState({ isOpen: false, workId: null, officerIds: [], days: '' });
     const [selectedWorks, setSelectedWorks] = useState([]);
     const [bulkAssignModal, setBulkAssignModal] = useState(false);
     const [isBulkMode, setIsBulkMode] = useState(false); // NEW: Toggle for Bulk Edit
@@ -270,21 +270,21 @@ const AdminDashboard = () => {
             alert("No works selected.");
             return;
         }
-        if (!assignmentModal.officerId) {
-            alert("Please select an agency/officer.");
+        if (assignmentModal.officerIds.length === 0) {
+            alert("Please select one or more officers.");
             return;
         }
         setLoading(true);
         try {
             await api.put('/works/bulk-assign', {
                 work_ids: selectedWorks,
-                username: assignmentModal.officerId,
+                officer_ids: assignmentModal.officerIds.map(id => parseInt(id)),
                 deadline_days: assignmentModal.days ? parseInt(assignmentModal.days) : null
             });
             alert("Bulk assignment successful!");
             setSelectedWorks([]);
             setBulkAssignModal(false);
-            setAssignmentModal({ isOpen: false, workId: null, officerId: '', days: '' });
+            setAssignmentModal({ isOpen: false, workId: null, officerIds: [], days: '' });
             fetchWorks();
         } catch (error) {
             alert("Failed to assign works.");
@@ -493,19 +493,29 @@ const AdminDashboard = () => {
     };
 
     const handleAssignClick = (work) => {
-        setAssignmentModal({ isOpen: true, workId: work.id, officerId: work.assigned_officer_id || '', days: '' });
+        // Try to find default officer for this agency
+        let defaultIds = [];
+        if (work.assigned_officer_id) defaultIds.push(work.assigned_officer_id);
+        
+        if (defaultIds.length === 0 && work.agency_name) {
+            const match = officers.find(o => 
+                o.allowed_agencies && o.allowed_agencies.split(',').map(s => s.trim()).includes(work.agency_name.trim())
+            );
+            if (match) defaultIds.push(match.id);
+        }
+        setAssignmentModal({ isOpen: true, workId: work.id, officerIds: defaultIds, days: '' });
     };
 
     const submitAssignment = async () => {
-        if (!assignmentModal.workId || !assignmentModal.officerId) return;
+        if (!assignmentModal.workId || assignmentModal.officerIds.length === 0) return;
         try {
             const payload = {
-                officer_id: parseInt(assignmentModal.officerId),
+                officer_ids: assignmentModal.officerIds.map(id => parseInt(id)),
                 deadline_days: assignmentModal.days ? parseInt(assignmentModal.days) : 7
             };
             await api.post(`/works/${assignmentModal.workId}/assign`, payload);
             alert('Assignment successful!');
-            setAssignmentModal({ isOpen: false, workId: null, officerId: '', days: '' });
+            setAssignmentModal({ isOpen: false, workId: null, officerIds: [], days: '' });
             fetchWorks();
         } catch (e) {
             console.error("Assignment failed", e);
@@ -849,6 +859,19 @@ const AdminDashboard = () => {
                                 <button
                                     onClick={() => {
                                         if (selectedWorks.length === 0) return alert("Select works to attach");
+                                        
+                                        // Simple pre-selection: if all selected have same agency, try to find that officer
+                                        const selectedData = works.filter(w => selectedWorks.includes(w.id));
+                                        const uniqueAgencies = [...new Set(selectedData.map(w => w.agency_name))];
+                                        let defaultIds = [];
+                                        if (uniqueAgencies.length === 1 && uniqueAgencies[0]) {
+                                            const match = officers.find(o => 
+                                                o.allowed_agencies && o.allowed_agencies.split(',').map(s => s.trim()).includes(uniqueAgencies[0].trim())
+                                            );
+                                            if (match) defaultIds.push(match.id);
+                                        }
+
+                                        setAssignmentModal(prev => ({ ...prev, officerIds: defaultIds }));
                                         setBulkAssignModal(true);
                                     }}
                                     className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition whitespace-nowrap ${selectedWorks.length > 0 ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
@@ -1435,21 +1458,67 @@ const AdminDashboard = () => {
                 assignmentModal.isOpen && (
                     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                         <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
-                            <h3 className="text-lg font-bold mb-4">Assign Inspection</h3>
+                            {/* DMF Quick Select (Toggles) */}
+                            <div className="mb-4">
+                                <label className="block text-[10px] font-bold uppercase text-gray-400 mb-2">Toggle DMF Civil Engineers</label>
+                                <div className="flex gap-2">
+                                    {[1, 2, 3].map(num => {
+                                        const username = `DMFcivil${num}`;
+                                        const off = officers.find(o => o.username === username);
+                                        if (!off) return null;
+                                        const isSelected = assignmentModal.officerIds.includes(off.id.toString()) || assignmentModal.officerIds.includes(off.id);
+                                        return (
+                                            <button 
+                                                key={username}
+                                                type="button"
+                                                onClick={() => {
+                                                    setAssignmentModal(prev => {
+                                                        const current = [...prev.officerIds];
+                                                        const idx = current.indexOf(off.id.toString());
+                                                        const idx2 = current.indexOf(off.id);
+                                                        if (idx > -1) current.splice(idx, 1);
+                                                        else if (idx2 > -1) current.splice(idx2, 1);
+                                                        else current.push(off.id);
+                                                        return { ...prev, officerIds: current };
+                                                    });
+                                                }}
+                                                className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition ${isSelected ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200'}`}
+                                            >
+                                                Civil {num}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
 
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Select Officer</label>
-                                    <select
-                                        className="w-full border rounded-lg p-2 text-sm"
-                                        value={assignmentModal.officerId}
-                                        onChange={(e) => setAssignmentModal(prev => ({ ...prev, officerId: e.target.value }))}
-                                    >
-                                        <option value="">-- Choose Officer --</option>
-                                        {officers.map(off => (
-                                            <option key={off.id} value={off.id}>{off.username} ({off.department || 'General'})</option>
-                                        ))}
-                                    </select>
+                                    <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Select Officers (Tick one or more)</label>
+                                    <div className="max-h-48 overflow-y-auto border rounded-lg p-2 bg-gray-50 space-y-1">
+                                        {officers.map(off => {
+                                            const isSelected = assignmentModal.officerIds.includes(off.id.toString()) || assignmentModal.officerIds.includes(off.id);
+                                            return (
+                                                <label key={off.id} className="flex items-center gap-2 p-1.5 hover:bg-white rounded cursor-pointer transition">
+                                                    <input 
+                                                        type="checkbox"
+                                                        checked={isSelected}
+                                                        onChange={() => {
+                                                            setAssignmentModal(prev => {
+                                                                const current = [...prev.officerIds];
+                                                                const sId = off.id;
+                                                                const idx = current.indexOf(sId);
+                                                                if (idx > -1) current.splice(idx, 1);
+                                                                else current.push(sId);
+                                                                return { ...prev, officerIds: current };
+                                                            });
+                                                        }}
+                                                        className="w-4 h-4 rounded text-blue-600"
+                                                    />
+                                                    <span className="text-sm text-gray-700">{off.username} <span className="text-[10px] text-gray-400">({off.department || 'General'})</span></span>
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
 
                                 <div>
@@ -1473,7 +1542,7 @@ const AdminDashboard = () => {
                                 </button>
                                 <button
                                     onClick={submitAssignment}
-                                    disabled={!assignmentModal.officerId}
+                                    disabled={assignmentModal.officerIds.length === 0}
                                     className="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
                                 >
                                     Assign

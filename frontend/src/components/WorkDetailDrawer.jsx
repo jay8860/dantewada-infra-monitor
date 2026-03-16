@@ -9,7 +9,7 @@ const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000/api').r
 
 const PHOTO_CATEGORIES = ['All', 'Before', 'During', 'After', 'Completed'];
 
-const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
+const WorkDetailDrawer = ({ work, isOpen, onClose, hideUpload = false }) => {
     const { user } = useAuth();
     const [timeline, setTimeline] = useState([]);
     const [loadingTimeline, setLoadingTimeline] = useState(false);
@@ -167,7 +167,7 @@ const WorkDetailDrawer = ({ work, isOpen, onClose }) => {
                                     </span>
                                 )}
                             </h4>
-                            {isLoggedIn && (
+                            {isLoggedIn && !hideUpload && (
                                 <button
                                     onClick={() => setUploadModalOpen(true)}
                                     className="flex items-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:from-blue-700 hover:to-indigo-700 transition-all shadow-sm hover:shadow-md"

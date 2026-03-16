@@ -66,12 +66,25 @@ class Work(Base):
     assigned_officer = relationship("User")
     inspections = relationship("Inspection", back_populates="work")
     work_photos = relationship("WorkPhoto", back_populates="work", order_by="WorkPhoto.uploaded_at.desc()")
+    assignments = relationship("WorkAssignment", back_populates="work", cascade="all, delete-orphan")
+
+class WorkAssignment(Base):
+    __tablename__ = "work_assignments"
+    id = Column(Integer, primary_key=True, index=True)
+    work_id = Column(Integer, ForeignKey("works.id"), index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    assigned_at = Column(DateTime, default=datetime.datetime.utcnow)
+    deadline = Column(DateTime, nullable=True)
+
+    work = relationship("Work", back_populates="assignments")
+    user = relationship("User")
 
 class Inspection(Base):
     __tablename__ = "inspections"
     id = Column(Integer, primary_key=True, index=True)
     work_id = Column(Integer, ForeignKey("works.id"))
     inspector_name = Column(String)
+    inspector_designation = Column(String, nullable=True)
     status_at_time = Column(String)
     remarks = Column(Text, nullable=True)
     latitude = Column(Float, nullable=True)

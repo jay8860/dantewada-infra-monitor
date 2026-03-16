@@ -30,6 +30,8 @@ const OfficerDashboard = () => {
     const [status, setStatus] = useState('In Progress');
     const [photoCategory, setPhotoCategory] = useState('During'); // NEW
     const [remarks, setRemarks] = useState('');
+    const [inspectorName, setInspectorName] = useState('');
+    const [inspectorDesignation, setInspectorDesignation] = useState('');
     const [declarationChecked, setDeclarationChecked] = useState(false);
     const [location, setLocation] = useState(null);
     const [submitting, setSubmitting] = useState(false);
@@ -155,6 +157,8 @@ const OfficerDashboard = () => {
         formData.append('longitude', location?.longitude || 0);
         formData.append('photos', photo);
         formData.append('remarks', remarks); 
+        formData.append('inspector_name', inspectorName);
+        formData.append('inspector_designation', inspectorDesignation);
         formData.append('work_id', selectedWork.id);
 
         try {
@@ -168,6 +172,8 @@ const OfficerDashboard = () => {
             alert("Update Successful!");
             setPhoto(null);
             setRemarks('');
+            setInspectorName('');
+            setInspectorDesignation('');
             setDeclarationChecked(false);
             setSelectedWork(null);
             fetchWorks();
@@ -187,6 +193,8 @@ const OfficerDashboard = () => {
                 checkPending();
                 setPhoto(null);
                 setRemarks('');
+                setInspectorName('');
+                setInspectorDesignation('');
                 setDeclarationChecked(false);
                 setSelectedWork(null);
             }
@@ -254,23 +262,87 @@ const OfficerDashboard = () => {
                     <h2 className="font-bold text-lg">Inspect Work</h2>
                 </div>
                 <div className="p-4 overflow-y-auto max-w-lg mx-auto w-full">
-                    <div className="bg-white p-4 rounded-xl shadow-sm mb-6 border border-gray-100">
-                        <h3 className="font-bold text-gray-900 text-lg leading-tight">{selectedWork.work_name}</h3>
-                        <p className="text-sm text-gray-500 mt-2">{selectedWork.block} | {selectedWork.work_code}</p>
-                        {selectedWork.inspection_deadline && (
-                            <div className={`mt-3 inline-block px-3 py-1 text-xs font-semibold rounded-full border ${getDeadlineStatus(selectedWork.inspection_deadline).color}`}>
-                                {getDeadlineStatus(selectedWork.inspection_deadline).label}
+                    {/* Simplified Header */}
+                    <div className="bg-white p-5 rounded-xl shadow-sm mb-6 border border-gray-100 flex flex-col gap-4">
+                        <div className="flex justify-between items-start gap-3">
+                            <div>
+                                <h3 className="font-bold text-gray-900 text-base leading-tight font-hindi">{selectedWork.work_name_brief || selectedWork.work_name}</h3>
+                                <p className="text-xs text-gray-500 mt-1 uppercase tracking-wider">{selectedWork.block} | {selectedWork.work_code}</p>
                             </div>
-                        )}
-                        <button 
-                            onClick={() => setIsDrawerOpen(true)}
-                            className="mt-3 ml-2 inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition"
-                        >
-                            <Clock size={12} /> View History & Photos
-                        </button>
+                            <button 
+                                onClick={() => setIsDrawerOpen(true)}
+                                className="shrink-0 bg-blue-50 text-blue-600 p-2 rounded-lg border border-blue-100"
+                                title="View Details"
+                            >
+                                <Info size={20} />
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 py-3 border-y border-gray-50">
+                            <div>
+                                <p className="text-[10px] text-gray-400 uppercase font-bold mb-0.5">AS Number</p>
+                                <p className="text-sm font-semibold text-gray-700">{selectedWork.as_number || 'N/A'}</p>
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-gray-400 uppercase font-bold mb-0.5">AS Amount</p>
+                                <p className="text-sm font-semibold text-blue-700">₹{selectedWork.sanctioned_amount} L</p>
+                            </div>
+                        </div>
+
+                        {/* Last Inspection Preview */}
+                        <div className="flex items-center gap-4">
+                            <div className="w-16 h-16 rounded-lg bg-gray-100 border overflow-hidden shrink-0">
+                                {selectedWork.photos && selectedWork.photos.length > 0 ? (
+                                    <img 
+                                        src={`http://localhost:8000/${selectedWork.photos[0].thumbnail_path}`} 
+                                        className="w-full h-full object-cover"
+                                        alt="Last status"
+                                    />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                        <Camera size={20} />
+                                    </div>
+                                )}
+                            </div>
+                            <div>
+                                <p className="text-[10px] text-gray-400 uppercase font-bold">Last Inspection Happened</p>
+                                <p className="text-sm font-medium text-gray-600">
+                                    {selectedWork.inspection_date 
+                                        ? new Date(selectedWork.inspection_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short', year: 'numeric'}) 
+                                        : 'Never inspected'}
+                                </p>
+                                <button 
+                                    onClick={() => setIsDrawerOpen(true)}
+                                    className="text-blue-600 text-xs font-bold hover:underline flex items-center gap-1 mt-1"
+                                >
+                                    <Clock size={12} /> Full Timeline
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                    <form onSubmit={handleSubmit} className="space-y-5 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Inspector Name</label>
+                                <input 
+                                    className="w-full border p-3 rounded-lg bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none text-sm" 
+                                    placeholder="Your Name"
+                                    value={inspectorName}
+                                    onChange={e => setInspectorName(e.target.value)}
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Designation</label>
+                                <input 
+                                    className="w-full border p-3 rounded-lg bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none text-sm" 
+                                    placeholder="e.g. S.E."
+                                    value={inspectorDesignation}
+                                    onChange={e => setInspectorDesignation(e.target.value)}
+                                />
+                            </div>
+                        </div>
                         <div>
                             <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Observation Status</label>
                             <select className="w-full border p-3 rounded-lg bg-gray-50 focus:ring-2 focus:ring-blue-500 outline-none" value={status} onChange={e => setStatus(e.target.value)}>
@@ -390,6 +462,7 @@ const OfficerDashboard = () => {
                     isOpen={isDrawerOpen} 
                     onClose={() => setIsDrawerOpen(false)} 
                     work={selectedWork} 
+                    hideUpload={true}
                 />
             </div>
         );
