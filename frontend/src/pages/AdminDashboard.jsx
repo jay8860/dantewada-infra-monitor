@@ -8,6 +8,7 @@ import WorkDetailDrawer from '../components/WorkDetailDrawer';
 import MultiSelect from '../components/MultiSelect';
 import VillageSummaryTable from '../components/VillageSummaryTable';
 import UserManagementModal from '../components/UserManagementModal';
+import PhotoLightbox from '../components/PhotoLightbox';
 
 // Debounce helper
 const useDebounce = (value, delay) => {
@@ -60,6 +61,8 @@ const AdminDashboard = () => {
     const [assignmentModal, setAssignmentModal] = useState({ isOpen: false, workId: null, officerId: '', days: '' });
     const [selectedWorks, setSelectedWorks] = useState([]);
     const [bulkAssignModal, setBulkAssignModal] = useState(false);
+    const [isBulkMode, setIsBulkMode] = useState(false); // NEW: Toggle for Bulk Edit
+    const [lightboxState, setLightboxState] = useState({ isOpen: false, index: 0, photos: [] }); // NEW: Global Lightbox
 
     // --- State: UI & Controls ---
     const [viewMode, setViewMode] = useState('table'); // 'table' or 'map'
@@ -458,6 +461,31 @@ const AdminDashboard = () => {
         }
     };
 
+    // --- Feature: Global Photo Lightbox ---
+    const openGlobalLightbox = (workId) => {
+        // Find all works with a photo currently displaying in the table
+        const worksWithPhotos = works.filter(w => w.first_thumbnail);
+        
+        // Map them into the format PhotoLightbox expects
+        const lightboxPhotos = worksWithPhotos.map(w => ({
+            image_path: w.first_thumbnail,
+            caption: `[${w.work_code}] ${w.work_name}`,
+            category: w.current_status,
+            uploaded_by: w.agency_name || 'Admin'
+        }));
+
+        // Find the index of the clicked work
+        const clickedIndex = worksWithPhotos.findIndex(w => w.id === workId);
+        
+        if (clickedIndex !== -1) {
+            setLightboxState({
+                isOpen: true,
+                index: clickedIndex,
+                photos: lightboxPhotos
+            });
+        }
+    };
+
     const toggleColumn = (col) => {
         setVisibleColumns(prev => ({ ...prev, [col]: !prev[col] }));
     };
@@ -727,16 +755,32 @@ const AdminDashboard = () => {
                                 <ArrowUpDown size={16} /> <span className="hidden sm:inline">Sync GSheet</span>
                             </button>
 
-                            {/* Bulk Assign */}
-                            <button
-                                onClick={() => {
-                                    if (selectedWorks.length === 0) return alert("Select works to attach");
-                                    setBulkAssignModal(true);
-                                }}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition whitespace-nowrap ${selectedWorks.length > 0 ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
-                            >
-                                <span className="hidden sm:inline">Bulk Assign ({selectedWorks.length})</span>
-                            </button>
+                            {/* Bulk Edit Toggle */}
+                            <label className="flex items-center gap-2 bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium border border-gray-200 cursor-pointer hover:bg-gray-100 transition whitespace-nowrap">
+                                <input
+                                    type="checkbox"
+                                    checked={isBulkMode}
+                                    onChange={(e) => {
+                                        setIsBulkMode(e.target.checked);
+                                        if (!e.target.checked) setSelectedWorks([]);
+                                    }}
+                                    className="rounded text-indigo-600 focus:ring-indigo-500"
+                                />
+                                Bulk Select
+                            </label>
+
+                            {/* Bulk Assign (Only visible in Bulk Mode) */}
+                            {isBulkMode && (
+                                <button
+                                    onClick={() => {
+                                        if (selectedWorks.length === 0) return alert("Select works to attach");
+                                        setBulkAssignModal(true);
+                                    }}
+                                    className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition whitespace-nowrap ${selectedWorks.length > 0 ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+                                >
+                                    <span className="hidden sm:inline">Bulk Assign ({selectedWorks.length})</span>
+                                </button>
+                            )}
 
                             {/* Download Excel */}
                             <button
@@ -956,14 +1000,16 @@ const AdminDashboard = () => {
                                     <table className="w-full text-left border-collapse text-sm">
                                         <thead className="bg-gray-50 border-b sticky top-0 z-10 w-full">
                                             <tr>
-                                                <th className="p-4 bg-gray-50">
-                                                    <input 
-                                                        type="checkbox" 
-                                                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                                        onChange={toggleSelectAll}
-                                                        checked={works.length > 0 && selectedWorks.length === works.length}
-                                                    />
-                                                </th>
+                                                {isBulkMode && (
+                                                    <th className="p-4 bg-gray-50">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                                            onChange={toggleSelectAll}
+                                                            checked={works.length > 0 && selectedWorks.length === works.length}
+                                                        />
+                                                    </th>
+                                                )}
                                                 <th className="p-4 font-semibold text-gray-600">#</th>
                                                 {[
                                                     { key: 'work_name', label: 'Work Details' },
@@ -1004,14 +1050,16 @@ const AdminDashboard = () => {
                                         <tbody className="divide-y">
                                             {works.map((work, idx) => (
                                                 <tr key={work.id} className={`transition-colors group ${selectedWorks.includes(work.id) ? 'bg-blue-50/50' : 'hover:bg-blue-50/30'}`}>
-                                                    <td className="p-4">
-                                                        <input 
-                                                            type="checkbox" 
-                                                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                                            checked={selectedWorks.includes(work.id)}
-                                                            onChange={() => toggleSelectWork(work.id)}
-                                                        />
-                                                    </td>
+                                                    {isBulkMode && (
+                                                        <td className="p-4">
+                                                            <input 
+                                                                type="checkbox" 
+                                                                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                                                checked={selectedWorks.includes(work.id)}
+                                                                onChange={() => toggleSelectWork(work.id)}
+                                                            />
+                                                        </td>
+                                                    )}
                                                     <td className="p-4 text-xs text-gray-400">
                                                         {(pagination.page - 1) * pagination.limit + idx + 1}
                                                     </td>
@@ -1071,7 +1119,10 @@ const AdminDashboard = () => {
                                                                     src={`${import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:8000'}/${work.first_thumbnail}`}
                                                                     alt="Work photo"
                                                                     className="w-12 h-12 rounded-lg object-cover border border-gray-200 shadow-sm cursor-pointer hover:scale-110 transition-transform"
-                                                                    onClick={() => handleViewDetails(work)}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        openGlobalLightbox(work.id);
+                                                                    }}
                                                                 />
                                                             ) : (
                                                                 <span className="text-xs text-gray-300">—</span>
@@ -1174,6 +1225,17 @@ const AdminDashboard = () => {
                 isOpen={isDrawerOpen}
                 onClose={() => setIsDrawerOpen(false)}
             />
+
+            {/* Global Photo Lightbox for smooth reviewing */}
+            {lightboxState.isOpen && (
+                <PhotoLightbox 
+                    photos={lightboxState.photos}
+                    currentIndex={lightboxState.index}
+                    isOpen={lightboxState.isOpen}
+                    onClose={() => setLightboxState(prev => ({ ...prev, isOpen: false }))}
+                    onNavigate={(newIndex) => setLightboxState(prev => ({ ...prev, index: newIndex }))}
+                />
+            )}
 
             {/* User Management Modal */}
             <UserManagementModal
