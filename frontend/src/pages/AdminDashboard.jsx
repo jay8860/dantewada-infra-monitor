@@ -1313,11 +1313,8 @@ const AdminDashboard = () => {
                                                             )}
                                                         </td>
                                                     )}
-                                                    {visibleColumns.assignment && (
-                                                        <td className="p-4 whitespace-nowrap">
-                                                            {/* ... assignment content ... */}
-                                                        </td>
-                                                    )}
+                                                    {/* Removed duplicate empty assignment column */}
+
                                                     {visibleColumns.admin_remarks && (
                                                         <td 
                                                             className="p-4 text-sm text-gray-600 whitespace-pre-wrap min-w-[150px] cursor-pointer hover:bg-gray-50 group transition-colors"
@@ -1473,8 +1470,8 @@ const AdminDashboard = () => {
                                     <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Select Officer/Agency</label>
                                     <select
                                         className="w-full border rounded-lg p-2 text-sm"
-                                        value={assignmentModal.officerId}
-                                        onChange={(e) => setAssignmentModal(prev => ({ ...prev, officerId: e.target.value }))}
+                                        value={assignmentModal.officerIds[0] || ''}
+                                        onChange={(e) => setAssignmentModal(prev => ({ ...prev, officerIds: [e.target.value] }))}
                                     >
                                         <option value="">-- Choose Agency --</option>
                                         {officers.map(off => (
@@ -1504,7 +1501,7 @@ const AdminDashboard = () => {
                                 </button>
                                 <button
                                     onClick={handleBulkAssign}
-                                    disabled={!assignmentModal.officerId}
+                                    disabled={assignmentModal.officerIds.length === 0}
                                     className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg text-sm hover:bg-indigo-700 disabled:opacity-50"
                                 >
                                     Assign All ({selectedWorks.length})

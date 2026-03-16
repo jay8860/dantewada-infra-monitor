@@ -447,23 +447,52 @@ def build_works_query(db, user, department, block, panchayat, status, agency, ye
 
     # --- PRIVACY FILTER ---
     if user and user.role != "admin":
+        from sqlalchemy import or_, and_
+        restriction_filters = []
+        any_restriction = False
+        
+        # 1. Agency restriction
         if user.allowed_agencies:
             agencies = [a.strip() for a in user.allowed_agencies.split(',') if a.strip()]
             if agencies:
-                query = query.filter(models.Work.agency_name.in_(agencies))
+                restriction_filters.append(models.Work.agency_name.in_(agencies))
+                any_restriction = True
+        
+        # 2. Block restriction
+        if user.allowed_blocks:
+            blocks = [b.strip() for b in user.allowed_blocks.split(',') if b.strip()]
+            if blocks:
+                restriction_filters.append(models.Work.block.in_(blocks))
+                any_restriction = True
+                
+        # 3. Panchayat restriction
+        if user.allowed_panchayats:
+            panchayats = [p.strip() for p in user.allowed_panchayats.split(',') if p.strip()]
+            if panchayats:
+                restriction_filters.append(models.Work.panchayat.in_(panchayats))
+                any_restriction = True
+
+        # Explicit assignments override (OR)
+        user_assignment_ids = db.query(models.WorkAssignment.work_id).filter(models.WorkAssignment.user_id == user.id).all()
+        assigned_ids = [r[0] for r in user_assignment_ids]
+        
+        explicit_cond = or_(
+            models.Work.assigned_officer_id == user.id,
+            models.Work.id.in_(assigned_ids)
+        )
+        
+        if any_restriction:
+            # Restrictions are additive (AND)
+            restriction_cond = and_(*restriction_filters)
+            # Match restrictions OR be explicitly assigned
+            query = query.filter(or_(restriction_cond, explicit_cond))
         else:
-            # Check for works explicitly assigned to this user via work_assignments table
-            user_assignment_ids = db.query(models.WorkAssignment.work_id).filter(models.WorkAssignment.user_id == user.id).all()
-            assigned_ids = [r[0] for r in user_assignment_ids]
-            
-            # Combine legacy assigned_officer_id and new WorkAssignment table
-            from sqlalchemy import or_
-            query = query.filter(
-                or_(
-                    models.Work.assigned_officer_id == user.id,
-                    models.Work.id.in_(assigned_ids)
-                )
-            )
+            # If no specific restrictions are set, we assume full access (if that's the intended project policy)
+            # However, if the project intention for officers is to only ever see assigned works unless agencies are set:
+            # query = query.filter(explicit_cond)
+            # Given the UI says "Leave empty for full access", we allow full access.
+            pass
+
 
     if search:
         search_term = f"%{search}%"
