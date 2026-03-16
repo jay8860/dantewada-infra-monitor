@@ -464,24 +464,31 @@ const AdminDashboard = () => {
     // --- Feature: Global Photo Lightbox ---
     const openGlobalLightbox = (workId) => {
         // Find all works with a photo currently displaying in the table
-        const worksWithPhotos = works.filter(w => w.first_thumbnail);
+        const worksWithPhotos = works.filter(w => w.photos && w.photos.length > 0);
         
-        // Map them into the format PhotoLightbox expects
-        const lightboxPhotos = worksWithPhotos.map(w => ({
-            image_path: w.first_thumbnail,
-            caption: `[${w.work_code}] ${w.work_name}`,
-            category: w.current_status,
-            uploaded_by: w.agency_name || 'Admin'
-        }));
+        const allPhotos = [];
+        let targetIndex = 0;
 
-        // Find the index of the clicked work
-        const clickedIndex = worksWithPhotos.findIndex(w => w.id === workId);
-        
-        if (clickedIndex !== -1) {
+        worksWithPhotos.forEach(w => {
+            if (w.id === workId) {
+                targetIndex = allPhotos.length; // Start index for this work
+            }
+            w.photos.forEach(p => {
+                allPhotos.push({
+                    image_path: p.image_path || p.thumbnail_path, // Fallback
+                    caption: `[${w.work_code}] ${w.work_name} ${p.caption ? '- ' + p.caption : ''}`,
+                    category: p.category || w.current_status,
+                    uploaded_by: p.uploaded_by || w.agency_name || 'Admin',
+                    uploaded_at: p.uploaded_at
+                });
+            });
+        });
+
+        if (allPhotos.length > 0) {
             setLightboxState({
                 isOpen: true,
-                index: clickedIndex,
-                photos: lightboxPhotos
+                index: targetIndex,
+                photos: allPhotos
             });
         }
     };
@@ -1114,16 +1121,25 @@ const AdminDashboard = () => {
                                                     {visibleColumns.probable_completion_date && <td className="p-4 text-sm text-gray-600">{work.probable_completion_date ? new Date(work.probable_completion_date).toLocaleDateString() : '-'}</td>}
                                                     {visibleColumns.photos && (
                                                         <td className="p-4">
-                                                            {work.first_thumbnail ? (
-                                                                <img
-                                                                    src={`${import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:8000'}/${work.first_thumbnail}`}
-                                                                    alt="Work photo"
-                                                                    className="w-12 h-12 rounded-lg object-cover border border-gray-200 shadow-sm cursor-pointer hover:scale-110 transition-transform"
+                                                            {work.photos && work.photos.length > 0 ? (
+                                                                <div 
+                                                                    className="relative inline-block cursor-pointer group"
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
                                                                         openGlobalLightbox(work.id);
                                                                     }}
-                                                                />
+                                                                >
+                                                                    <img
+                                                                        src={`${import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:8000'}/${work.photos[0].thumbnail_path}`}
+                                                                        alt="Work photo"
+                                                                        className="w-12 h-12 rounded-lg object-cover border border-gray-200 shadow-sm group-hover:scale-105 transition-transform"
+                                                                    />
+                                                                    {work.photos.length > 1 && (
+                                                                        <div className="absolute inset-0 bg-black/50 text-white flex justify-center items-center text-xs font-bold rounded-lg pointer-events-none transition-opacity group-hover:bg-black/40">
+                                                                            +{work.photos.length - 1}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
                                                             ) : (
                                                                 <span className="text-xs text-gray-300">—</span>
                                                             )}

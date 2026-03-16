@@ -512,23 +512,26 @@ async def get_works(
     
     works = query.offset(skip).limit(limit).all()
     
-    # Fetch first thumbnail for each work (batch query)
+    # Fetch all photos for the works
     work_ids = [w.id for w in works]
-    first_photos = {}
+    work_photos_map = {}
     latest_inspections = {}
+    
     if work_ids:
         from sqlalchemy import func
-        subq = db.query(
-            models.WorkPhoto.work_id,
-            func.min(models.WorkPhoto.id).label('first_id')
-        ).filter(models.WorkPhoto.work_id.in_(work_ids)).group_by(models.WorkPhoto.work_id).subquery()
-        
-        photos = db.query(models.WorkPhoto).join(
-            subq, models.WorkPhoto.id == subq.c.first_id
-        ).all()
-        
+        photos = db.query(models.WorkPhoto).filter(models.WorkPhoto.work_id.in_(work_ids)).order_by(models.WorkPhoto.uploaded_at.desc()).all()
         for p in photos:
-            first_photos[p.work_id] = p.thumbnail_path
+            if p.work_id not in work_photos_map:
+                work_photos_map[p.work_id] = []
+            work_photos_map[p.work_id].append({
+                "id": p.id,
+                "image_path": p.image_path,
+                "thumbnail_path": p.thumbnail_path,
+                "caption": p.caption,
+                "category": p.category,
+                "uploaded_by": p.uploaded_by,
+                "uploaded_at": p.uploaded_at.isoformat() if p.uploaded_at else None
+            })
             
         subq_insp = db.query(
             models.Inspection.work_id,
@@ -576,7 +579,7 @@ async def get_works(
             "assignment_status": w.assignment_status,
             "inspection_deadline": w.inspection_deadline.isoformat() if w.inspection_deadline else None,
             "assigned_officer": {"id": w.assigned_officer.id, "username": w.assigned_officer.username} if w.assigned_officer else None,
-            "first_thumbnail": first_photos.get(w.id),
+            "photos": work_photos_map.get(w.id, []),
             "last_updated": (w.inspection_date or w.sanctioned_date or datetime.utcnow()).isoformat() if True else None,
             "user_remark": latest_inspections.get(w.id, {}).get("remark"),
             "photo_upload_date": latest_inspections.get(w.id, {}).get("date"),
