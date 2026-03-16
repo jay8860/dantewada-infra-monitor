@@ -84,14 +84,19 @@ try:
         @app.get("/{full_path:path}", include_in_schema=False)
         async def serve_spa(full_path: str):
             # API & Uploads should have been handled by their respective mounts/routers
-            # If we are here, it's either a rogue API call or a static file/SPA route
             if full_path.startswith("api/") or full_path.startswith("uploads/"):
                 return {"error": "Not Found"}
 
-            # Try to see if it's a file in the static root (e.g. vite.svg, favicon.ico)
             file_path = os.path.join(STATIC_DIR, full_path)
             if os.path.isfile(file_path):
                  return FileResponse(file_path)
+
+            # --- PREVENT CRASH ---
+            # If the path looks like a file (has an extension like .js, .css, .png, etc.)
+            # and it wasn't found above, return a 404 instead of index.html.
+            # This prevents the browser from trying to parse the login page as a script.
+            if "." in full_path.split("/")[-1]:
+                return {"error": f"File '{full_path}' not found"}
 
             # Otherwise, fallback to index.html for React Router
             idx_path = os.path.join(STATIC_DIR, "index.html")
