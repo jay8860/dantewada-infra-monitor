@@ -3,7 +3,7 @@ import api from '../api';
 import MapComponent from '../components/MapComponent';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { LayoutDashboard, MapPin, Upload, LogOut, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, RefreshCw, RotateCcw, Calendar, Users, Plus, Edit, UserX, CheckCircle, ArrowDownWideNarrow, Check, X, Image as ImageIcon, FileText } from 'lucide-react';
+import { LayoutDashboard, MapPin, Upload, LogOut, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, RefreshCw, RotateCcw, Calendar, Users, Plus, Edit, UserX, CheckCircle, ArrowDownWideNarrow, Check, X, Image as ImageIcon, FileText, ChevronDown, Trash2 } from 'lucide-react';
 import WorkDetailDrawer from '../components/WorkDetailDrawer';
 import MultiSelect from '../components/MultiSelect';
 import VillageSummaryTable from '../components/VillageSummaryTable';
@@ -75,6 +75,8 @@ const AdminDashboard = () => {
     const [file, setFile] = useState(null);
     const [downloading, setDownloading] = useState(false);
     const [showColumnMenu, setShowColumnMenu] = useState(false);
+    const [showExportMenu, setShowExportMenu] = useState(false);
+    const [showFilters, setShowFilters] = useState(true); // NEW: Toggle dynamic filters
 
     // --- State: Sync ---
     const [syncModalOpen, setSyncModalOpen] = useState(false);
@@ -657,283 +659,342 @@ const AdminDashboard = () => {
 
             <main className="flex-1 overflow-hidden flex flex-col">
                 {/* Controls Bar */}
-                <div className="bg-white p-4 border-b flex flex-col md:flex-row gap-4 justify-between items-center shadow-sm z-20">
-                    <div className="flex gap-4 w-full md:w-auto">
-                        <div className="bg-gray-100 p-1 rounded-lg flex">
-                            {/* ... buttons ... */}
-                            <button
-                                onClick={() => setViewMode('table')}
-                                className={`px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition ${viewMode === 'table' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                            >
-                                <LayoutDashboard size={16} /> Table
-                            </button>
-                            <button
-                                onClick={() => setViewMode('map')}
-                                className={`px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition ${viewMode === 'map' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                            >
-                                <MapPin size={16} /> Map
-                            </button>
-                            <button
-                                onClick={() => setViewMode('summary')}
-                                className={`px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition ${viewMode === 'summary' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                            >
-                                <LayoutDashboard size={16} className="rotate-90" /> Summary
-                            </button>
-                            <button
-                                onClick={() => { setViewMode('users'); fetchUsers(); }}
-                                className={`px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition ${viewMode === 'users' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-                            >
-                                <Users size={16} /> Users
-                            </button>
+                <div className="bg-white border-b flex flex-col shadow-sm z-20">
+                    <div className="p-4 flex flex-col md:flex-row gap-4 justify-between items-center bg-white">
+                        <div className="flex gap-4 w-full md:w-auto overflow-x-auto no-scrollbar pb-2 md:pb-0">
+                            <div className="bg-gray-100 p-1 rounded-lg flex shrink-0">
+                                <button
+                                    onClick={() => setViewMode('table')}
+                                    className={`px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition ${viewMode === 'table' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    <LayoutDashboard size={16} /> Table
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('map')}
+                                    className={`px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition ${viewMode === 'map' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    <MapPin size={16} /> Map
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('summary')}
+                                    className={`px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition ${viewMode === 'summary' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    <LayoutDashboard size={16} className="rotate-90" /> Summary
+                                </button>
+                                <button
+                                    onClick={() => { setViewMode('users'); fetchUsers(); }}
+                                    className={`px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition ${viewMode === 'users' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    <Users size={16} /> Users
+                                </button>
+                            </div>
+
+                            <div className="relative w-full md:w-64 lg:w-96">
+                                <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search works..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
+                                />
+                            </div>
                         </div>
 
-                        <div className="relative flex-1 md:w-64">
-                            <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
-                            <input
-                                type="text"
-                                placeholder="Search Name or Work Code..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50"
-                            />
+                        <div className="flex gap-3 w-full md:w-auto items-center justify-end">
+                            {/* Filter Toggle */}
+                            <button
+                                onClick={() => setShowFilters(!showFilters)}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition border ${showFilters ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+                            >
+                                <Filter size={16} />
+                                <span>Filters</span>
+                                {Object.values(filters).some(v => Array.isArray(v) ? v.length > 0 : !!v) && (
+                                    <span className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></span>
+                                )}
+                            </button>
+
+                            <div className="h-6 w-px bg-gray-200 hidden sm:block"></div>
+
+                            {/* Actions/Tools Group */}
+                            <div className="relative">
+                                <button
+                                    onClick={() => setShowColumnMenu(!showColumnMenu)}
+                                    className="bg-white border hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition"
+                                >
+                                    <Plus size={16} /> 
+                                    <span>Actions</span>
+                                    <ChevronDown size={14} className={`transition-transform duration-200 ${showColumnMenu ? 'rotate-180' : ''}`} />
+                                </button>
+                                {showColumnMenu && (
+                                    <>
+                                        <div className="fixed inset-0 z-[40]" onClick={() => setShowColumnMenu(false)}></div>
+                                        <div className="absolute top-full right-0 mt-2 bg-white shadow-2xl border border-gray-100 p-2 rounded-xl w-64 z-[50] animate-in fade-in slide-in-from-top-2 duration-200">
+                                            <div className="px-3 py-2 border-b border-gray-50 mb-1">
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">System Actions</p>
+                                            </div>
+                                            
+                                            <button
+                                                onClick={() => { setSyncModalOpen(true); setShowColumnMenu(false); }}
+                                                className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-green-50/50 rounded-lg transition group"
+                                            >
+                                                <div className="bg-green-50 p-1.5 rounded-md group-hover:bg-green-100 transition">
+                                                    <ArrowUpDown size={14} className="text-green-600" />
+                                                </div>
+                                                <div className="text-left">
+                                                    <p className="font-bold text-green-700">Sync Google Sheet</p>
+                                                    <p className="text-[10px] text-green-600">Refresh master data</p>
+                                                </div>
+                                            </button>
+
+                                            <label className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-indigo-50/50 rounded-lg transition group cursor-pointer">
+                                                <div className="bg-indigo-50 p-1.5 rounded-md group-hover:bg-indigo-100 transition">
+                                                    <Users size={14} className="text-indigo-600" />
+                                                </div>
+                                                <div className="flex-1 flex items-center justify-between">
+                                                    <div className="text-left">
+                                                        <p className="font-bold text-indigo-700">Bulk Mode</p>
+                                                        <p className="text-[10px] text-indigo-600">Assign multiple works</p>
+                                                    </div>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isBulkMode}
+                                                        onChange={(e) => {
+                                                            setIsBulkMode(e.target.checked);
+                                                            if (!e.target.checked) setSelectedWorks([]);
+                                                        }}
+                                                        className="rounded text-indigo-600 focus:ring-indigo-500"
+                                                    />
+                                                </div>
+                                            </label>
+
+                                            <div className="h-px bg-gray-100 my-1 mx-2"></div>
+                                            
+                                            <div className="px-3 py-2">
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Visible Columns</p>
+                                                <div className="grid grid-cols-1 gap-1 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+                                                    {Object.keys(visibleColumns).map(col => (
+                                                        <label key={col} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-gray-50 p-1.5 rounded transition">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={visibleColumns[col]}
+                                                                onChange={() => toggleColumn(col)}
+                                                                className="rounded text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                                                            />
+                                                            <span className="capitalize text-gray-600">{col.replace(/_/g, ' ')}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Master Export Group */}
+                            <div className="relative">
+                                <button
+                                    onClick={() => setShowExportMenu(!showExportMenu)}
+                                    className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition shadow-md"
+                                >
+                                    <FileText size={16} /> 
+                                    <span>Export</span>
+                                    <ChevronDown size={14} className={`transition-transform duration-200 ${showExportMenu ? 'rotate-180' : ''}`} />
+                                </button>
+
+                                {showExportMenu && (
+                                    <>
+                                        <div className="fixed inset-0 z-[40]" onClick={() => setShowExportMenu(false)}></div>
+                                        <div className="absolute top-full right-0 mt-2 bg-white shadow-2xl border border-gray-100 p-2 rounded-xl w-64 z-[50] animate-in fade-in slide-in-from-top-2 duration-200">
+                                            <div className="px-3 py-2 border-b border-gray-50 mb-1">
+                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Download Options</p>
+                                            </div>
+                                            
+                                            <button
+                                                onClick={() => { handleDownload(); setShowExportMenu(false); }}
+                                                disabled={downloading}
+                                                className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition group disabled:opacity-50"
+                                            >
+                                                <div className="bg-gray-100 p-1.5 rounded-md group-hover:bg-gray-200 transition">
+                                                    <FileText size={14} className="text-gray-600" />
+                                                </div>
+                                                <div className="text-left">
+                                                    <p className="font-bold">Standard CSV</p>
+                                                    <p className="text-[10px] text-gray-500">Excel compatible data</p>
+                                                </div>
+                                            </button>
+
+                                            <button
+                                                onClick={() => { handlePDFDownload(); setShowExportMenu(false); }}
+                                                disabled={downloading}
+                                                className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-red-50/50 rounded-lg transition group disabled:opacity-50"
+                                            >
+                                                <div className="bg-red-50 p-1.5 rounded-md group-hover:bg-red-100 transition">
+                                                    <ImageIcon size={14} className="text-red-600" />
+                                                </div>
+                                                <div className="text-left">
+                                                    <p className="font-bold text-red-700">Visual PDF Report</p>
+                                                    <p className="text-[10px] text-red-500">Includes all site photos</p>
+                                                </div>
+                                            </button>
+
+                                            <button
+                                                onClick={() => { handleExportInspectionStatus(); setShowExportMenu(false); }}
+                                                disabled={downloading}
+                                                className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-purple-50/50 rounded-lg transition group disabled:opacity-50"
+                                            >
+                                                <div className="bg-purple-50 p-1.5 rounded-md group-hover:bg-purple-100 transition">
+                                                    <CheckCircle size={14} className="text-purple-600" />
+                                                </div>
+                                                <div className="text-left">
+                                                    <p className="font-bold text-purple-700">Inspection Status</p>
+                                                    <p className="text-[10px] text-purple-500">Officer audit tracking</p>
+                                                </div>
+                                            </button>
+                                            
+                                            {downloading && (
+                                                <div className="mt-2 px-3 py-2 bg-blue-50 rounded-lg flex items-center gap-2">
+                                                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
+                                                    <span className="text-[10px] font-bold text-blue-700 uppercase">Generating File...</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     </div>
 
-                    <div className="flex gap-3 w-full md:w-auto items-center flex-wrap pb-2 md:pb-0">
-                        {/* Sort Toggle Button */}
-                        <button
-                            onClick={() => {
-                                setSortConfig(prev => 
-                                    (prev.key === 'sanctioned_amount' && prev.direction === 'desc')
-                                        ? { key: null, direction: 'asc' }
-                                        : { key: 'sanctioned_amount', direction: 'desc' }
-                                );
-                            }}
-                            className={`px-3 py-1.5 rounded flex items-center gap-1.5 text-xs font-semibold border ${sortConfig.key === 'sanctioned_amount' && sortConfig.direction === 'desc' ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                            title="Sort by Biggest Sanctioned Amount First"
-                        >
-                            <ArrowDownWideNarrow size={14} /> 
-                            {sortConfig.key === 'sanctioned_amount' && sortConfig.direction === 'desc' ? 'Sorted: Highest AS' : 'Sort: Highest AS'}
-                        </button>
-                        
-                        {/* Reset Button */}
-                        <button
-                            onClick={resetFilters}
-                            className="bg-gray-100 border hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
-                            title="Reset all filters"
-                        >
-                            <RotateCcw size={16} /> Reset
-                        </button>
-
-                        {/* Dynamic Filters */}
-                        {/* Single Select Filters */}
-                        <select
-                            className="bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-32"
-                            value={filters.block}
-                            onChange={(e) => setFilters(p => ({ ...p, block: e.target.value }))}
-                        >
-                            <option value="">All Blocks</option>
-                            {blockOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                        </select>
-
-                        <MultiSelect
-                            options={filterOptions.panchayats}
-                            value={filters.panchayat}
-                            onChange={(val) => setFilters(p => ({ ...p, panchayat: val }))}
-                            placeholder="Panchayat..."
-                            label=""
-                            showSearch={true}
-                        />
-
-                        <select
-                            className="bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-32"
-                            value={filters.department}
-                            onChange={(e) => setFilters(p => ({ ...p, department: e.target.value }))}
-                        >
-                            <option value="">All Sectors</option>
-                            {filterOptions.departments.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                        </select>
-
-                        <select
-                            className="bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-32"
-                            value={filters.agency}
-                            onChange={(e) => setFilters(p => ({ ...p, agency: e.target.value }))}
-                        >
-                            <option value="">All Agencies</option>
-                            {filterOptions.agencies.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                        </select>
-
-                        <MultiSelect
-                            options={filterOptions.statuses}
-                            value={filters.status}
-                            onChange={(val) => setFilters(p => ({ ...p, status: val }))}
-                            placeholder="Status..."
-                            label=""
-                            showSearch={false}
-                        />
-
-                        {/* Date Filters */}
-                        <div className="flex items-center gap-2 bg-white border rounded-lg px-2 py-1.5 shadow-sm h-[38px]">
-                            <span className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1"><Calendar size={12} /> AS Date</span>
-                            <div className="h-4 w-px bg-gray-200"></div>
-                            <input
-                                type="date"
-                                value={dateRange.start}
-                                onChange={(e) => setDateRange(p => ({ ...p, start: e.target.value }))}
-                                className="text-xs outline-none text-gray-700 w-[110px] bg-transparent"
-                                placeholder="From"
-                            />
-                            <span className="text-gray-400 text-xs">-</span>
-                            <input
-                                type="date"
-                                value={dateRange.end}
-                                onChange={(e) => setDateRange(p => ({ ...p, end: e.target.value }))}
-                                className="text-xs outline-none text-gray-700 w-[110px] bg-transparent"
-                                placeholder="To"
-                            />
-                            {/* Today shortcut */}
-                            <button
-                                onClick={() => {
-                                    const today = new Date().toISOString().split('T')[0];
-                                    setDateRange(p => ({ ...p, end: today }));
-                                }}
-                                className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded border border-blue-100 font-bold hover:bg-blue-100 uppercase tracking-wide"
-                            >
-                                Today
-                            </button>
-                        </div>
-
-                        {/* Column Toggle */}
-                        <div className="relative">
-                            <button
-                                onClick={() => setShowColumnMenu(!showColumnMenu)}
-                                className="bg-white border hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 whitespace-nowrap"
-                            >
-                                <LayoutDashboard size={16} /> Columns
-                            </button>
-                            {showColumnMenu && (
-                                <div className="absolute top-full right-0 mt-2 bg-white shadow-xl border p-3 rounded-lg w-56 z-50 grid grid-cols-1 gap-2 max-h-64 overflow-y-auto">
-                                    <h4 className="text-xs font-bold text-gray-500 uppercase mb-1">Toggle Columns</h4>
-                                    {Object.keys(visibleColumns).map(col => (
-                                        <label key={col} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50 p-1 rounded">
-                                            <input
-                                                type="checkbox"
-                                                checked={visibleColumns[col]}
-                                                onChange={() => toggleColumn(col)}
-                                                className="rounded text-blue-600 focus:ring-blue-500"
-                                            />
-                                            <span className="capitalize">{col.replace(/_/g, ' ')}</span>
-                                        </label>
-                                    ))}
+                    {/* Collapsible Filter Bar */}
+                    <div className={`overflow-hidden transition-all duration-300 ease-in-out ${showFilters ? 'max-h-96 opacity-100 border-t bg-gray-50/50' : 'max-h-0 opacity-0'}`}>
+                        <div className="p-4 flex flex-wrap gap-4 items-center">
+                            <div className="flex flex-col gap-1">
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Location</span>
+                                <div className="flex gap-2">
+                                    <select
+                                        className="bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-32 shadow-sm"
+                                        value={filters.block}
+                                        onChange={(e) => setFilters(p => ({ ...p, block: e.target.value }))}
+                                    >
+                                        <option value="">All Blocks</option>
+                                        {blockOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                    </select>
+            
+                                    <MultiSelect
+                                        options={filterOptions.panchayats}
+                                        value={filters.panchayat}
+                                        onChange={(val) => setFilters(p => ({ ...p, panchayat: val }))}
+                                        placeholder="Panchayat..."
+                                        label=""
+                                        showSearch={true}
+                                    />
                                 </div>
-                            )}
-                        </div>
+                            </div>
 
+                            <div className="flex flex-col gap-1">
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Sector & Agency</span>
+                                <div className="flex gap-2">
+                                    <select
+                                        className="bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-32 shadow-sm"
+                                        value={filters.department}
+                                        onChange={(e) => setFilters(p => ({ ...p, department: e.target.value }))}
+                                    >
+                                        <option value="">All Sectors</option>
+                                        {filterOptions.departments.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                    </select>
+            
+                                    <select
+                                        className="bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-32 shadow-sm"
+                                        value={filters.agency}
+                                        onChange={(e) => setFilters(p => ({ ...p, agency: e.target.value }))}
+                                    >
+                                        <option value="">All Agencies</option>
+                                        {filterOptions.agencies.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                    </select>
+                                </div>
+                            </div>
 
-
-                        {/* Google Sheet Sync */}
-                        {/* Google Sheet Sync & Export */}
-                        <div className="flex gap-4 items-center">
-                            <button
-                                onClick={() => setSyncModalOpen(true)}
-                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition whitespace-nowrap"
-                            >
-                                <ArrowUpDown size={16} /> <span className="hidden sm:inline">Sync GSheet</span>
-                            </button>
-
-                            {/* Bulk Edit Toggle */}
-                            <label className="flex items-center gap-2 bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium border border-gray-200 cursor-pointer hover:bg-gray-100 transition whitespace-nowrap">
-                                <input
-                                    type="checkbox"
-                                    checked={isBulkMode}
-                                    onChange={(e) => {
-                                        setIsBulkMode(e.target.checked);
-                                        if (!e.target.checked) setSelectedWorks([]);
-                                    }}
-                                    className="rounded text-indigo-600 focus:ring-indigo-500"
+                            <div className="flex flex-col gap-1">
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Status</span>
+                                <MultiSelect
+                                    options={filterOptions.statuses}
+                                    value={filters.status}
+                                    onChange={(val) => setFilters(p => ({ ...p, status: val }))}
+                                    placeholder="Status..."
+                                    label=""
+                                    showSearch={false}
                                 />
-                                Bulk Select
-                            </label>
+                            </div>
 
-                            {/* Bulk Assign (Only visible in Bulk Mode) */}
-                            {isBulkMode && (
-                                <button
-                                    onClick={() => {
-                                        if (selectedWorks.length === 0) return alert("Select works to attach");
-                                        
-                                        // Simple pre-selection: if all selected have same agency, try to find that officer
-                                        const selectedData = works.filter(w => selectedWorks.includes(w.id));
-                                        const uniqueAgencies = [...new Set(selectedData.map(w => w.agency_name))];
-                                        let defaultIds = [];
-                                        if (uniqueAgencies.length === 1 && uniqueAgencies[0]) {
-                                            const match = officers.find(o => 
-                                                o.allowed_agencies && o.allowed_agencies.split(',').map(s => s.trim()).includes(uniqueAgencies[0].trim())
+                            <div className="flex flex-col gap-1">
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Sanction Date</span>
+                                <div className="flex items-center gap-2 bg-white border rounded-lg px-2 py-1.5 shadow-sm h-[38px]">
+                                    <Calendar size={12} className="text-gray-400" />
+                                    <input
+                                        type="date"
+                                        value={dateRange.start}
+                                        onChange={(e) => setDateRange(p => ({ ...p, start: e.target.value }))}
+                                        className="text-xs outline-none text-gray-700 w-[110px] bg-transparent"
+                                        placeholder="From"
+                                    />
+                                    <span className="text-gray-400 text-xs">-</span>
+                                    <input
+                                        type="date"
+                                        value={dateRange.end}
+                                        onChange={(e) => setDateRange(p => ({ ...p, end: e.target.value }))}
+                                        className="text-xs outline-none text-gray-700 w-[110px] bg-transparent"
+                                        placeholder="To"
+                                    />
+                                    <button
+                                        onClick={() => {
+                                            const today = new Date().toISOString().split('T')[0];
+                                            setDateRange(p => ({ ...p, end: today }));
+                                        }}
+                                        className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded border border-blue-100 font-bold hover:bg-blue-100 uppercase tracking-wide"
+                                    >
+                                        Today
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col gap-1 self-end pb-0.5">
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => {
+                                            setSortConfig(prev => 
+                                                (prev.key === 'sanctioned_amount' && prev.direction === 'desc')
+                                                    ? { key: null, direction: 'asc' }
+                                                    : { key: 'sanctioned_amount', direction: 'desc' }
                                             );
-                                            if (match) defaultIds.push(match.id);
-                                        }
-
-                                        setAssignmentModal(prev => ({ ...prev, officerIds: defaultIds }));
-                                        setBulkAssignModal(true);
-                                    }}
-                                    className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition whitespace-nowrap ${selectedWorks.length > 0 ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
-                                >
-                                    <span className="hidden sm:inline">Bulk Assign ({selectedWorks.length})</span>
-                                </button>
-                            )}
-
-                            {/* Download Excel */}
-                            <button
-                                onClick={handleDownload}
-                                disabled={downloading}
-                                className="bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition whitespace-nowrap disabled:opacity-50"
-                            >
-                                {downloading ? (
-                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                ) : (
-                                    <FileText size={16} />
-                                )}
-                                <span className="hidden sm:inline">Export CSV</span>
-                            </button>
-
-                            {/* Export Visual PDF */}
-                            <button
-                                onClick={handlePDFDownload}
-                                disabled={downloading}
-                                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition whitespace-nowrap disabled:opacity-50 shadow-sm"
-                            >
-                                {downloading ? (
-                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                ) : (
-                                    <ImageIcon size={16} />
-                                )}
-                                <span className="hidden sm:inline">Visual PDF (+Photos)</span>
-                            </button>
-                            
-                            {/* Export Inspection Status */}
-                            <button
-                                onClick={handleExportInspectionStatus}
-                                disabled={downloading}
-                                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition whitespace-nowrap disabled:opacity-50 shadow-sm"
-                            >
-                                {downloading ? (
-                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                                ) : (
-                                    <Upload size={16} className="rotate-180" />
-                                )}
-                                <span className="hidden sm:inline">Export Status Report</span>
-                            </button>
+                                        }}
+                                        className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-semibold border transition shadow-sm ${sortConfig.key === 'sanctioned_amount' && sortConfig.direction === 'desc' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                                    >
+                                        <ArrowDownWideNarrow size={14} /> 
+                                        High AS
+                                    </button>
+                                    
+                                    <button
+                                        onClick={resetFilters}
+                                        className="bg-gray-100 border border-gray-200 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition"
+                                    >
+                                        <RotateCcw size={14} /> Reset
+                                    </button>
+                                </div>
+                            </div>
 
                             {/* Panchayat View Toggle (Summary Only) */}
                             {viewMode === 'summary' && (
-                                <label className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-2 rounded-lg text-sm font-medium border border-blue-200 cursor-pointer hover:bg-blue-100 transition whitespace-nowrap">
-                                    <input
-                                        type="checkbox"
-                                        checked={panchayatView}
-                                        onChange={(e) => setPanchayatView(e.target.checked)}
-                                        className="rounded text-blue-600 focus:ring-blue-500"
-                                    />
-                                    Panchayat View (CEO Janpad Only)
-                                </label>
+                                <div className="flex flex-col gap-1 self-end pb-0.5 ml-auto">
+                                    <label className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold border border-blue-200 cursor-pointer hover:bg-blue-100 transition whitespace-nowrap shadow-sm">
+                                        <input
+                                            type="checkbox"
+                                            checked={panchayatView}
+                                            onChange={(e) => setPanchayatView(e.target.checked)}
+                                            className="rounded text-blue-600 focus:ring-blue-500"
+                                        />
+                                        Panchayat View
+                                    </label>
+                                </div>
                             )}
                         </div>
                     </div>
@@ -1372,7 +1433,7 @@ const AdminDashboard = () => {
                         </div>
                     )}
                 </div>
-            </main >
+            </main>
 
             <WorkDetailDrawer
                 work={selectedWork}
@@ -1553,7 +1614,7 @@ const AdminDashboard = () => {
                     </div>
                 )
             }
-        </div >
+        </div>
     );
 };
 
