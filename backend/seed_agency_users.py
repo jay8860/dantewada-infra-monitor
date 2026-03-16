@@ -70,7 +70,7 @@ AGENCY_MAPPING = {
     "JILA KHEL ADHIKARI": "sportsdnt",
     "Livelihood coll.soci.Dantewada": "livelihood",
     "A.D.D.S.D.A.Dantewada": "addsda",
-    "ABC Constructions": "abcconst",
+
 }
 
 def seed_users():
