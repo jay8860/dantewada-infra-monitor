@@ -39,11 +39,6 @@ def debug_info():
         "env_keys": list(os.environ.keys())
     }
 
-@app.get("/")
-def read_root():
-    if STARTUP_ERROR:
-        return {"status": "Critical Startup Error", "error": STARTUP_ERROR}
-    return {"message": "Welcome to Dantewada Work Monitoring System API"}
 
 @app.get("/api/health")
 def health_check():
@@ -72,15 +67,22 @@ try:
     if os.path.exists(STATIC_DIR):
         app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
 
-        # Catch-all for React Router
+        # Catch-all for React Router & Root
         from fastapi.responses import FileResponse
-        @app.get("/{full_path:path}")
+        @app.get("/", include_in_schema=False)
+        async def serve_index():
+            return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+
+        @app.get("/{full_path:path}", include_in_schema=False)
         async def serve_spa(full_path: str):
             # If it's an API route that didn't match the router, it's a 404
             if full_path.startswith("api/"):
                 return {"error": "API route not found"}
-            # Otherwise, serve index.html for React Router
-            return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+            # Serve index.html for React Router
+            idx_path = os.path.join(STATIC_DIR, "index.html")
+            if os.path.exists(idx_path):
+                return FileResponse(idx_path)
+            return {"message": "Frontend not found, but API is alive"}
 
     # Scheduler
     scheduler = AsyncIOScheduler()
