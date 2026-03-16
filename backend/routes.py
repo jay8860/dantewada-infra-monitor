@@ -13,6 +13,7 @@ import os
 import pandas as pd
 from io import BytesIO
 import image_utils
+import pdf_generator
 
 router = APIRouter()
 
@@ -664,6 +665,71 @@ async def export_works(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Export Failed: {str(e)}")
+
+@router.get("/works/export/pdf")
+async def export_works_pdf(
+    department: Optional[List[str]] = Query(None), 
+    block: Optional[List[str]] = Query(None),
+    panchayat: Optional[List[str]] = Query(None),
+    status: Optional[List[str]] = Query(None),
+    agency: Optional[List[str]] = Query(None),
+    year: Optional[List[str]] = Query(None),
+    search: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "asc",
+    db: Session = Depends(get_db)
+):
+    try:
+        # 1. Fetch filtered works
+        query = build_works_query(db, department, block, panchayat, status, agency, year, search)
+        query = apply_sorting(query, sort_by, sort_order)
+        # Limit to prevent massive un-renderable PDFs
+        works = query.limit(500).all()
+        
+        # 2. Fetch all photos for the works
+        work_ids = [w.id for w in works]
+        work_photos_map = {}
+        
+        if work_ids:
+            photos = db.query(models.WorkPhoto).filter(models.WorkPhoto.work_id.in_(work_ids)).order_by(models.WorkPhoto.uploaded_at.desc()).all()
+            for p in photos:
+                if p.work_id not in work_photos_map:
+                    work_photos_map[p.work_id] = []
+                work_photos_map[p.work_id].append({
+                    "image_path": p.image_path,
+                    "thumbnail_path": p.thumbnail_path,
+                    "category": p.category,
+                    "uploaded_at": p.uploaded_at.isoformat() if p.uploaded_at else None
+                })
+                
+        # 3. Build dictionary format matching pdf_generator expectations
+        result = []
+        for w in works:
+            result.append({
+                "work_code": w.work_code,
+                "work_name": w.work_name,
+                "agency_name": w.agency_name,
+                "block": f"{w.block} - {w.panchayat}",
+                "sanctioned_amount": w.sanctioned_amount,
+                "current_status": w.current_status,
+                "admin_remarks": w.admin_remarks,
+                "photos": work_photos_map.get(w.id, [])
+            })
+            
+        # 4. Generate PDF buffer
+        pdf_buffer = pdf_generator.build_visual_pdf(result)
+        
+        return Response(
+            content=pdf_buffer.getvalue(),
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=Dantewada_Visual_Report.pdf"}
+        )
+    except Exception as e:
+        print("PDF Export failed:", str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/reports/inspection-status")
 async def export_inspection_status(db: Session = Depends(get_db)):

@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import api from '../api';
 import { saveOfflineUpdate, getPendingUpdates, deletePendingUpdate } from '../offlineManager';
 import { useAuth } from '../contexts/AuthContext';
-import { MapPin, RefreshCw, LogOut, Search, Clock, AlertTriangle, CheckCircle, Calendar, ChevronLeft, ChevronRight, Camera } from 'lucide-react';
+import { MapPin, RefreshCw, LogOut, Search, Clock, AlertTriangle, CheckCircle, Calendar, ChevronLeft, ChevronRight, Camera, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import WorkDetailDrawer from '../components/WorkDetailDrawer';
 
 const OfficerDashboard = () => {
     const { user, logout } = useAuth();
@@ -17,6 +18,7 @@ const OfficerDashboard = () => {
     // UI State
     const [activeTab, setActiveTab] = useState('assignments'); // 'assignments' | 'directory'
     const [selectedWork, setSelectedWork] = useState(null); // For Inspection Form
+    const [isDrawerOpen, setIsDrawerOpen] = useState(false); // NEW: Historical Context
     const [searchTerm, setSearchTerm] = useState('');
 
     // Pagination
@@ -33,6 +35,7 @@ const OfficerDashboard = () => {
     const [submitting, setSubmitting] = useState(false);
     const [usingManualLoc, setUsingManualLoc] = useState(false);
     const [pendingCount, setPendingCount] = useState(0);
+    const [uploadProgress, setUploadProgress] = useState(0); // NEW: Progress Bar
 
     useEffect(() => {
         fetchWorks();
@@ -155,7 +158,13 @@ const OfficerDashboard = () => {
         formData.append('work_id', selectedWork.id);
 
         try {
-            await api.post(`/works/${selectedWork.id}/inspections`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+            await api.post(`/works/${selectedWork.id}/inspections`, formData, { 
+                headers: { 'Content-Type': 'multipart/form-data' },
+                onUploadProgress: (progressEvent) => {
+                    const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                    setUploadProgress(percentCompleted);
+                }
+            });
             alert("Update Successful!");
             setPhoto(null);
             setRemarks('');
@@ -183,6 +192,7 @@ const OfficerDashboard = () => {
             }
         } finally {
             setSubmitting(false);
+            setUploadProgress(0);
         }
     };
 
@@ -252,6 +262,12 @@ const OfficerDashboard = () => {
                                 {getDeadlineStatus(selectedWork.inspection_deadline).label}
                             </div>
                         )}
+                        <button 
+                            onClick={() => setIsDrawerOpen(true)}
+                            className="mt-3 ml-2 inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 transition"
+                        >
+                            <Clock size={12} /> View History & Photos
+                        </button>
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
@@ -339,11 +355,42 @@ const OfficerDashboard = () => {
                             </label>
                         </div>
 
-                        <button disabled={submitting} type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-bold shadow-lg shadow-blue-200 transition disabled:opacity-70 disabled:cursor-not-allowed">
-                            {submitting ? 'Uploading...' : 'Submit Inspection'}
-                        </button>
-                    </form>
+                            {/* Disclaimer */}
+                            <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100 flex items-start gap-2 mt-4 shadow-sm">
+                                <Info className="text-blue-500 flex-shrink-0 mt-0.5" size={16} />
+                                <p className="text-[11px] text-blue-800 leading-relaxed font-medium">
+                                    <strong className="block text-xs mb-0.5">Offline Sync is Enabled.</strong> 
+                                    If there is poor or no network connectivity at the site, your inspection data and photos will be safely saved offline to your browser. You can sync them automatically when you return to a coverage area.
+                                </p>
+                            </div>
+
+                            <button 
+                                disabled={submitting || !photo || (!location && !usingManualLoc) || !declarationChecked} 
+                                type="submit" 
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-bold shadow-lg shadow-blue-200 transition disabled:opacity-70 disabled:cursor-not-allowed relative overflow-hidden flex justify-center items-center"
+                            >
+                                {submitting && (
+                                    <div 
+                                        className="absolute top-0 left-0 h-full bg-blue-800/40 transition-all duration-200"
+                                        style={{ width: `${uploadProgress}%` }}
+                                    />
+                                )}
+                                <span className="relative z-10 flex flex-col items-center gap-0.5">
+                                    <span>{submitting ? 'Uploading...' : 'Submit Inspection'}</span>
+                                    {submitting && uploadProgress > 0 && (
+                                        <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full">{uploadProgress}%</span>
+                                    )}
+                                </span>
+                            </button>
+                        </form>
                 </div>
+                
+                {/* Historical Context Drawer */}
+                <WorkDetailDrawer 
+                    isOpen={isDrawerOpen} 
+                    onClose={() => setIsDrawerOpen(false)} 
+                    work={selectedWork} 
+                />
             </div>
         );
     }

@@ -3,7 +3,7 @@ import api from '../api';
 import MapComponent from '../components/MapComponent';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { LayoutDashboard, MapPin, Upload, LogOut, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, RefreshCw, RotateCcw, Calendar, Users, Plus, Edit, UserX, CheckCircle } from 'lucide-react';
+import { LayoutDashboard, MapPin, Upload, LogOut, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, RefreshCw, RotateCcw, Calendar, Users, Plus, Edit, UserX, CheckCircle, ArrowDownWideNarrow, Check, X, Image as ImageIcon, FileText } from 'lucide-react';
 import WorkDetailDrawer from '../components/WorkDetailDrawer';
 import MultiSelect from '../components/MultiSelect';
 import VillageSummaryTable from '../components/VillageSummaryTable';
@@ -54,6 +54,7 @@ const AdminDashboard = () => {
         probable_completion_date: false,
         photos: true,
         assignment: true,
+        admin_remarks: true,
         user_remark: true,
         photo_upload_date: true,
         reported_status: true
@@ -63,6 +64,7 @@ const AdminDashboard = () => {
     const [bulkAssignModal, setBulkAssignModal] = useState(false);
     const [isBulkMode, setIsBulkMode] = useState(false); // NEW: Toggle for Bulk Edit
     const [lightboxState, setLightboxState] = useState({ isOpen: false, index: 0, photos: [] }); // NEW: Global Lightbox
+    const [editingAdminRemark, setEditingAdminRemark] = useState({ workId: null, text: '' }); // NEW: Inline Editing
 
     // --- State: UI & Controls ---
     const [viewMode, setViewMode] = useState('table'); // 'table' or 'map'
@@ -90,7 +92,7 @@ const AdminDashboard = () => {
         block: '',
         panchayat: [], // Changed to array for MultiSelect
         department: '',
-        status: [], // Changed to array for MultiSelect
+        status: ['In Progress', 'Not Started', 'Stalled'], // Exclude 'Completed' by default
         agency: '',
         year: ''
     });
@@ -381,6 +383,18 @@ const AdminDashboard = () => {
         setSearchTerm('');
     };
 
+    // --- Feature: Inline Admin Remark Edit ---
+    const handleAdminRemarkSave = async (workId, newText) => {
+        try {
+            await api.put(`/works/${workId}/admin`, { admin_remarks: newText });
+            setWorks(prev => prev.map(w => w.id === workId ? { ...w, admin_remarks: newText } : w));
+            setEditingAdminRemark({ workId: null, text: '' });
+        } catch (error) {
+            console.error("Failed to save admin remark", error);
+            alert("Failed to save remark.");
+        }
+    };
+
     const handleDownload = async () => {
         setDownloading(true);
         try {
@@ -416,6 +430,44 @@ const AdminDashboard = () => {
         } catch (error) {
             console.error("Download failed", error);
             alert("Failed to download Excel file.");
+        } finally {
+            setDownloading(false);
+        }
+    };
+
+    const handlePDFDownload = async () => {
+        setDownloading(true);
+        try {
+            const params = new URLSearchParams();
+            Object.keys(filters).forEach(key => {
+                const val = filters[key];
+                if (Array.isArray(val)) {
+                    val.forEach(v => params.append(key, v));
+                } else if (val) {
+                    params.append(key, val);
+                }
+            });
+            if (debouncedSearch) params.append('search', debouncedSearch);
+            if (sortConfig.key) {
+                params.append('sort_by', sortConfig.key);
+                params.append('sort_order', sortConfig.direction);
+            }
+
+            const response = await api.get('/works/export/pdf', {
+                params,
+                responseType: 'blob'
+            });
+
+            const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `Dantewada_Visual_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error) {
+            console.error("PDF Download failed", error);
+            alert("Failed to download Visual PDF Report.");
         } finally {
             setDownloading(false);
         }
@@ -637,6 +689,22 @@ const AdminDashboard = () => {
                     </div>
 
                     <div className="flex gap-3 w-full md:w-auto items-center flex-wrap pb-2 md:pb-0">
+                        {/* Sort Toggle Button */}
+                        <button
+                            onClick={() => {
+                                setSortConfig(prev => 
+                                    (prev.key === 'sanctioned_amount' && prev.direction === 'desc')
+                                        ? { key: null, direction: 'asc' }
+                                        : { key: 'sanctioned_amount', direction: 'desc' }
+                                );
+                            }}
+                            className={`px-3 py-1.5 rounded flex items-center gap-1.5 text-xs font-semibold border ${sortConfig.key === 'sanctioned_amount' && sortConfig.direction === 'desc' ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                            title="Sort by Biggest Sanctioned Amount First"
+                        >
+                            <ArrowDownWideNarrow size={14} /> 
+                            {sortConfig.key === 'sanctioned_amount' && sortConfig.direction === 'desc' ? 'Sorted: Highest AS' : 'Sort: Highest AS'}
+                        </button>
+                        
                         {/* Reset Button */}
                         <button
                             onClick={resetFilters}
@@ -798,9 +866,23 @@ const AdminDashboard = () => {
                                 {downloading ? (
                                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                                 ) : (
-                                    <Upload size={16} className="rotate-180" />
+                                    <FileText size={16} />
                                 )}
-                                <span className="hidden sm:inline">Export Works</span>
+                                <span className="hidden sm:inline">Export CSV</span>
+                            </button>
+
+                            {/* Export Visual PDF */}
+                            <button
+                                onClick={handlePDFDownload}
+                                disabled={downloading}
+                                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition whitespace-nowrap disabled:opacity-50 shadow-sm"
+                            >
+                                {downloading ? (
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                ) : (
+                                    <ImageIcon size={16} />
+                                )}
+                                <span className="hidden sm:inline">Visual PDF (+Photos)</span>
                             </button>
                             
                             {/* Export Inspection Status */}
@@ -1032,6 +1114,7 @@ const AdminDashboard = () => {
                                                     { key: 'probable_completion_date', label: 'Est. End' },
                                                     { key: 'photos', label: 'Photos' },
                                                     { key: 'assignment', label: 'Inspection Status' },
+                                                    { key: 'admin_remarks', label: 'Admin Remarks' },
                                                     { key: 'user_remark', label: 'User Remark' },
                                                     { key: 'photo_upload_date', label: 'Photo Date' },
                                                     { key: 'reported_status', label: 'Reported Status' },
@@ -1148,6 +1231,37 @@ const AdminDashboard = () => {
                                                     {visibleColumns.assignment && (
                                                         <td className="p-4 whitespace-nowrap">
                                                             {/* ... assignment content ... */}
+                                                        </td>
+                                                    )}
+                                                    {visibleColumns.admin_remarks && (
+                                                        <td 
+                                                            className="p-4 text-sm text-gray-600 whitespace-pre-wrap min-w-[150px] cursor-pointer hover:bg-gray-50 group transition-colors"
+                                                            onClick={() => setEditingAdminRemark({ workId: work.id, text: work.admin_remarks || '' })}
+                                                        >
+                                                            {editingAdminRemark.workId === work.id ? (
+                                                                <div className="flex flex-col gap-2 relative">
+                                                                    <textarea
+                                                                        autoFocus
+                                                                        className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 min-h-[60px] text-xs shadow-inner"
+                                                                        value={editingAdminRemark.text}
+                                                                        onChange={(e) => setEditingAdminRemark(prev => ({ ...prev, text: e.target.value }))}
+                                                                        onBlur={() => handleAdminRemarkSave(work.id, editingAdminRemark.text)}
+                                                                        onKeyDown={(e) => {
+                                                                            if (e.key === 'Enter' && !e.shiftKey) {
+                                                                                e.preventDefault();
+                                                                                handleAdminRemarkSave(work.id, editingAdminRemark.text);
+                                                                            }
+                                                                            if (e.key === 'Escape') setEditingAdminRemark({ workId: null, text: '' });
+                                                                        }}
+                                                                    />
+                                                                    <span className="text-[10px] text-gray-400 font-medium absolute -bottom-5 right-0 bg-white px-1 shadow-sm border border-gray-100 rounded">Enter to save, Esc to cancel</span>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-center justify-between gap-2">
+                                                                    <span>{work.admin_remarks || <span className="text-gray-400 italic font-light">Click to add remark...</span>}</span>
+                                                                    <Edit size={12} className="text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                                                                </div>
+                                                            )}
                                                         </td>
                                                     )}
                                                     {visibleColumns.user_remark && <td className="p-4 text-sm text-gray-600 whitespace-pre-wrap min-w-[150px]">{work.user_remark || '-'}</td>}

@@ -10,3 +10,4 @@ openpyxl
 # For image processing
 pillow
 requests
+reportlab
