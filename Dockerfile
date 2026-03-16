@@ -33,5 +33,5 @@ ENV DATA_DIR=/app/data
 ENV PORT=8000
 
 # Start command
-# We use uvicorn to run the app
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# We use shell form to allow environment variable expansion (like $PORT)
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
