@@ -83,6 +83,20 @@ try:
         try:
             Base.metadata.create_all(bind=engine)
             init_admin.create_admin_if_missing()
+            
+            # Auto-Sync on Startup if DB is empty (handles first deploy zero-rows issue)
+            db = SessionLocal()
+            try:
+                work_count = db.query(models.Work).count()
+                if work_count == 0:
+                    logger.info("Database is empty. Triggering initial Auto-Sync...")
+                    # Run in background to not block startup
+                    scheduler.add_job(run_scheduled_sync, 'date', run_date=datetime.now())
+            except Exception as e:
+                logger.error(f"Auto-Sync Check Failed: {e}")
+            finally:
+                db.close()
+
             scheduler.add_job(run_scheduled_sync, 'interval', hours=24)
             scheduler.start()
             logger.info("Startup Complete.")
