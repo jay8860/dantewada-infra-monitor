@@ -220,9 +220,9 @@ const AdminDashboard = () => {
                 setGlobalStats(statsRes.data);
                 setFilterOptions(filtersRes.data);
                 
-                // If syncing is in progress, poll again soon
+                // If syncing is in progress, poll frequently for real-time progress updates
                 if (statsRes.data.is_syncing) {
-                    setTimeout(fetchGlobalData, 5000);
+                    setTimeout(fetchGlobalData, 2000);
                 }
             } catch (error) {
                 console.error("Failed to fetch global data", error);
@@ -944,18 +944,31 @@ const AdminDashboard = () => {
                 </div>
 
                 <div className="flex-1 relative bg-gray-50 overflow-hidden">
-                    {/* Global Sync Banner */}
-                    {globalStats.is_syncing && works.length === 0 && (
-                        <div className="bg-indigo-50 border-b border-indigo-100 px-6 py-4 flex items-center justify-between animate-pulse">
-                            <div className="flex items-center gap-3">
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
-                                <div>
-                                    <p className="text-sm font-bold text-indigo-900">Initial Data Synchronization in Progress</p>
-                                    <p className="text-xs text-indigo-600">Retrieving latest works from District Master Sheet. Rows will appear automatically soon.</p>
+                    {/* Global Sync Banner with Progress Bar */}
+                    {globalStats.is_syncing && works.length === 0 && (() => {
+                        const [curr, tot] = (globalStats.sync_progress || "0/0").split('/').map(Number);
+                        const pct = tot > 0 ? Math.min(100, Math.round((curr / tot) * 100)) : 0;
+                        return (
+                            <div className="bg-indigo-600 px-6 py-4 flex flex-col gap-3 shadow-lg">
+                                <div className="flex items-center justify-between text-white">
+                                    <div className="flex items-center gap-3">
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                        <div>
+                                            <p className="text-sm font-bold">Initial Data Synchronization in Progress</p>
+                                            <p className="text-[10px] opacity-90 text-indigo-100">Processed {curr} of {tot} rows from District Master Sheet...</p>
+                                        </div>
+                                    </div>
+                                    <span className="text-xs font-black bg-indigo-500 px-2 py-1 rounded">{pct}%</span>
+                                </div>
+                                <div className="w-full bg-indigo-800 rounded-full h-1.5 overflow-hidden">
+                                    <div 
+                                        className="bg-white h-full transition-all duration-500 ease-out"
+                                        style={{ width: `${pct}%` }}
+                                    ></div>
                                 </div>
                             </div>
-                        </div>
-                    )}
+                        );
+                    })()}
 
                     {(loading || mapLoading) && (
                         <div className="absolute inset-0 bg-white/50 z-20 flex items-center justify-center">
