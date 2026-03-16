@@ -219,6 +219,11 @@ const AdminDashboard = () => {
                 ]);
                 setGlobalStats(statsRes.data);
                 setFilterOptions(filtersRes.data);
+                
+                // If syncing is in progress, poll again soon
+                if (statsRes.data.is_syncing) {
+                    setTimeout(fetchGlobalData, 5000);
+                }
             } catch (error) {
                 console.error("Failed to fetch global data", error);
             }
@@ -939,6 +944,19 @@ const AdminDashboard = () => {
                 </div>
 
                 <div className="flex-1 relative bg-gray-50 overflow-hidden">
+                    {/* Global Sync Banner */}
+                    {globalStats.is_syncing && works.length === 0 && (
+                        <div className="bg-indigo-50 border-b border-indigo-100 px-6 py-4 flex items-center justify-between animate-pulse">
+                            <div className="flex items-center gap-3">
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+                                <div>
+                                    <p className="text-sm font-bold text-indigo-900">Initial Data Synchronization in Progress</p>
+                                    <p className="text-xs text-indigo-600">Retrieving latest works from District Master Sheet. Rows will appear automatically soon.</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {(loading || mapLoading) && (
                         <div className="absolute inset-0 bg-white/50 z-20 flex items-center justify-center">
                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
