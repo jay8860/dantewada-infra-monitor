@@ -61,10 +61,26 @@ try:
     from routes import router
 
     # Mount Uploads
-    UPLOAD_DIR = "uploads"
+    DATA_DIR = os.environ.get("DATA_DIR", ".")
+    UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
     if not os.path.exists(UPLOAD_DIR):
         os.makedirs(UPLOAD_DIR)
     app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
+    # Mount frontend static files
+    STATIC_DIR = os.path.join(os.getcwd(), "static")
+    if os.path.exists(STATIC_DIR):
+        app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
+
+        # Catch-all for React Router
+        from fastapi.responses import FileResponse
+        @app.get("/{full_path:path}")
+        async def serve_spa(full_path: str):
+            # If it's an API route that didn't match the router, it's a 404
+            if full_path.startswith("api/"):
+                return {"error": "API route not found"}
+            # Otherwise, serve index.html for React Router
+            return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 
     # Scheduler
     scheduler = AsyncIOScheduler()
