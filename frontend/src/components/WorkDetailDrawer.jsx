@@ -89,12 +89,30 @@ const WorkDetailDrawer = ({ work, isOpen, onClose, hideUpload = false }) => {
     };
 
     const handleDeletePhoto = async (photoId) => {
-        if (!confirm('Delete this photo?')) return;
+        const password = prompt('Enter Admin Password to delete this photo:');
+        if (!password) return;
         try {
-            await api.delete(`/works/${work.id}/photos/${photoId}`);
+            await api.delete(`/works/${work.id}/photos/${photoId}`, {
+                data: { admin_password: password }
+            });
             fetchPhotos(activeCategory);
         } catch (err) {
             console.error("Failed to delete photo", err);
+            alert(err.response?.data?.detail || "Deletion failed");
+        }
+    };
+
+    const handleDeleteInspection = async (inspectionId) => {
+        const password = prompt('Enter Admin Password to delete this inspection:');
+        if (!password) return;
+        try {
+            await api.delete(`/works/${work.id}/inspections/${inspectionId}`, {
+                data: { admin_password: password }
+            });
+            fetchTimeline();
+        } catch (err) {
+            console.error("Failed to delete inspection", err);
+            alert(err.response?.data?.detail || "Deletion failed");
         }
     };
 
@@ -273,10 +291,21 @@ const WorkDetailDrawer = ({ work, isOpen, onClose, hideUpload = false }) => {
                                                 <p className="font-bold text-gray-800 text-sm">{new Date(event.date + 'Z').toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' })}</p>
                                                 <p className="text-xs text-gray-500">{new Date(event.date + 'Z').toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
                                             </div>
-                                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${event.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                                                }`}>
-                                                {event.status}
-                                            </span>
+                                            <div className="flex gap-2 items-center">
+                                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${event.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                                                    }`}>
+                                                    {event.status}
+                                                </span>
+                                                {isAdmin && (
+                                                    <button 
+                                                        onClick={() => handleDeleteInspection(event.id)}
+                                                        className="text-red-400 hover:text-red-600 transition p-1 rounded hover:bg-red-50"
+                                                        title="Delete Inspection"
+                                                    >
+                                                        <Trash2 size={12} />
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
 
                                         <p className="text-xs text-gray-600 mt-1">

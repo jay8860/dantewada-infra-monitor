@@ -1143,17 +1143,25 @@ async def get_work_photos(
     ]
 
 
+class DeleteRequest(BaseModel):
+    admin_password: str
+
 @router.delete("/works/{work_id}/photos/{photo_id}")
 async def delete_work_photo(
     work_id: int,
     photo_id: int,
+    req: DeleteRequest,
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Delete a photo. Admin only."""
+    """Delete a photo. Admin only. Requires password."""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Only admin can delete photos")
     
+    # Verify password
+    if not auth.verify_password(req.admin_password, current_user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid admin password")
+
     photo = db.query(models.WorkPhoto).filter(
         models.WorkPhoto.id == photo_id,
         models.WorkPhoto.work_id == work_id
@@ -1173,6 +1181,38 @@ async def delete_work_photo(
     db.delete(photo)
     db.commit()
     return {"message": "Photo deleted"}
+
+@router.delete("/works/{work_id}/inspections/{inspection_id}")
+async def delete_inspection(
+    work_id: int,
+    inspection_id: int,
+    req: DeleteRequest,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete an inspection. Admin only. Requires password."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can delete inspections")
+    
+    # Verify password
+    if not auth.verify_password(req.admin_password, current_user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid admin password")
+
+    inspection = db.query(models.Inspection).filter(
+        models.Inspection.id == inspection_id,
+        models.Inspection.work_id == work_id
+    ).first()
+    
+    if not inspection:
+        raise HTTPException(status_code=404, detail="Inspection not found")
+    
+    # Optionally delete photos associated only with this inspection? 
+    # Current WorkPhoto model doesn't strictly have an inspection_id, 
+    # but let's just delete the record for now per user request.
+    
+    db.delete(inspection)
+    db.commit()
+    return {"message": "Inspection deleted"}
 
 
 # =============================================
