@@ -139,26 +139,9 @@ async def get_work_stats(db: Session = Depends(get_db)):
     completed = stats.get('Completed', 0)
     cancelled = stats.get('Cancelled', 0) # Assumes 'Cancelled' is the exact string
     
-    # Auto-Sync Fallback: If DB is empty, trigger a sync in the background
-    sync_active_meta = db.query(models.SystemMetadata).filter(models.SystemMetadata.key == "sync_active").first()
-    is_syncing = (sync_active_meta.value == "true") if sync_active_meta else False
-
-    if total == 0 and not is_syncing:
-        try:
-            import ingester
-            from main import scheduler, run_scheduled_sync
-            from datetime import datetime
-            scheduler.add_job(run_scheduled_sync, 'date', run_date=datetime.utcnow())
-            is_syncing = True # Optimistic
-        except Exception as e:
-            print(f"Lazy Sync Trigger Failed: {e}")
-    
-    # Last Sync Time & Progress
+    # Last Sync Time
     last_sync_meta = db.query(models.SystemMetadata).filter(models.SystemMetadata.key == "last_sync_time").first()
     last_sync = last_sync_meta.value if last_sync_meta else None
-    
-    sync_prog_meta = db.query(models.SystemMetadata).filter(models.SystemMetadata.key == "sync_progress").first()
-    sync_progress = sync_prog_meta.value if sync_prog_meta else "0/0"
 
     return {
         "total": total,
@@ -167,9 +150,7 @@ async def get_work_stats(db: Session = Depends(get_db)):
         "not_started": stats.get('Not Started', 0),
         "cc_pending": stats.get('CC Not Come in DMF', 0),
         "cancelled": cancelled,
-        "last_sync": last_sync,
-        "is_syncing": is_syncing,
-        "sync_progress": sync_progress
+        "last_sync": last_sync
     }
 
 @router.get("/works/filters")

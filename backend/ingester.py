@@ -81,19 +81,6 @@ def process_dataframe(df: pd.DataFrame, db: Session):
             if key not in gp_coords_cache:
                 gp_coords_cache[key] = (w.latitude, w.longitude)
 
-    # --- Sync Progress Initialization ---
-    total_rows = len(df)
-    def update_sync_progress(current):
-        prog = db.query(models.SystemMetadata).filter(models.SystemMetadata.key == "sync_progress").first()
-        val = f"{current}/{total_rows}"
-        if not prog:
-            db.add(models.SystemMetadata(key="sync_progress", value=val))
-        else:
-            prog.value = val
-        db.commit()
-
-    update_sync_progress(0)
-
     to_insert = []
     to_update = []
     seen_in_batch = set()
@@ -265,10 +252,6 @@ def process_dataframe(df: pd.DataFrame, db: Session):
                 to_update.append(data)
             else:
                 to_insert.append(data)
-            
-            # Update progress periodically
-            if idx > 0 and idx % 20 == 0:
-                update_sync_progress(idx)
                 
         except Exception as e:
             # "Ignore such things" - we skip the row but don't crash the sync

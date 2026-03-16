@@ -73,31 +73,10 @@ try:
         logger.info("Starting Scheduled Sync...")
         db = SessionLocal()
         try:
-            # Set Sync Active Flag
-            sync_flag = db.query(models.SystemMetadata).filter(models.SystemMetadata.key == "sync_active").first()
-            if not sync_flag:
-                sync_flag = models.SystemMetadata(key="sync_active", value="true")
-                db.add(sync_flag)
-            else:
-                sync_flag.value = "true"
-            db.commit()
-
             ingester.sync_from_google_sheet(db, ingester.DEFAULT_SHEET_URL)
-            
-            # Reset Flag
-            sync_flag.value = "false"
-            db.commit()
             logger.info("Sync Complete.")
         except Exception as e:
             logger.error(f"Sync Failed: {e}")
-            # Reset on failure
-            try:
-                # Refresh DB session if needed
-                sf = db.query(models.SystemMetadata).filter(models.SystemMetadata.key == "sync_active").first()
-                if sf: 
-                    sf.value = "false"
-                    db.commit()
-            except: pass
         finally:
             db.close()
 
@@ -107,24 +86,6 @@ try:
             Base.metadata.create_all(bind=engine)
             init_admin.create_admin_if_missing()
             
-            # Auto-Sync on Startup if DB is empty
-            db = SessionLocal()
-            try:
-                work_count = db.query(models.Work).count()
-                logger.info(f"Startup check: DB has {work_count} works.")
-                if work_count == 0:
-                    logger.info("Database is empty. Triggering initial Auto-Sync immediately...")
-                    # Run in background to not block startup
-                    scheduler.add_job(run_scheduled_sync, 'date', run_date=datetime.now())
-                else:
-                    # Even if not empty, if last sync was very long ago, sync?
-                    # For now just log
-                    logger.info("Database has records, skipping startup sync.")
-            except Exception as e:
-                logger.error(f"Auto-Sync Check Failed: {e}")
-            finally:
-                db.close()
-
             scheduler.add_job(run_scheduled_sync, 'interval', hours=24)
             scheduler.start()
             logger.info("Startup Complete.")
