@@ -59,12 +59,14 @@ const AdminDashboard = () => {
         photo_upload_date: true,
         reported_status: true
     });
-    const [assignmentModal, setAssignmentModal] = useState({ isOpen: false, workId: null, officerIds: [], days: '' });
     const [selectedWorks, setSelectedWorks] = useState([]);
+    const [allMatchingSelected, setAllMatchingSelected] = useState(false); // NEW: Cross-page select all
     const [bulkAssignModal, setBulkAssignModal] = useState(false);
     const [isBulkMode, setIsBulkMode] = useState(false); // NEW: Toggle for Bulk Edit
     const [lightboxState, setLightboxState] = useState({ isOpen: false, index: 0, photos: [] }); // NEW: Global Lightbox
     const [editingAdminRemark, setEditingAdminRemark] = useState({ workId: null, text: '' }); // NEW: Inline Editing
+    const [assignmentModal, setAssignmentModal] = useState({ isOpen: false, workId: null, officerIds: [], days: '' });
+    const [assignmentSearch, setAssignmentSearch] = useState(''); // NEW: Search in assignment modal
 
     // --- State: UI & Controls ---
     const [viewMode, setViewMode] = useState('table'); // 'table' or 'map'
@@ -95,9 +97,10 @@ const AdminDashboard = () => {
         panchayat: [], // Changed to array for MultiSelect
         department: '',
         status: ['In Progress', 'Not Started', 'Stalled'], // Exclude 'Completed' by default
-        agency: '',
+        agency: [], // Changed to array for MultiSelect
         year: ''
     });
+    const [amountRange, setAmountRange] = useState({ min: '', max: '' }); // NEW: Amount Range Filter
     const [dateRange, setDateRange] = useState({ start: '', end: '' });
 
     // --- Fetch TABLE Works (Paginated) ---
@@ -124,6 +127,10 @@ const AdminDashboard = () => {
             // Date Range
             if (dateRange.start) params.append('start_date', dateRange.start);
             if (dateRange.end) params.append('end_date', dateRange.end);
+
+            // Amount Range
+            if (amountRange.min) params.append('min_amount', amountRange.min);
+            if (amountRange.max) params.append('max_amount', amountRange.max);
 
             if (debouncedSearch) params.append('search', debouncedSearch);
             if (sortConfig.key) {
@@ -165,6 +172,10 @@ const AdminDashboard = () => {
             // Date Range for Map
             if (dateRange.start) params.append('start_date', dateRange.start);
             if (dateRange.end) params.append('end_date', dateRange.end);
+
+            // Amount Range for Map
+            if (amountRange.min) params.append('min_amount', amountRange.min);
+            if (amountRange.max) params.append('max_amount', amountRange.max);
 
             if (debouncedSearch) params.append('search', debouncedSearch);
 
@@ -254,17 +265,20 @@ const AdminDashboard = () => {
     // Reset Page on Filter Change
     useEffect(() => {
         setPagination(prev => ({ ...prev, page: 1 }));
-    }, [filters, dateRange, debouncedSearch]);
+        setAllMatchingSelected(false); // Reset cross-page selection on filter change
+    }, [filters, dateRange, amountRange, debouncedSearch]);
 
     // Bulk Select logic
     const toggleSelectWork = (id) => {
         setSelectedWorks(prev => prev.includes(id) ? prev.filter(wid => wid !== id) : [...prev, id]);
+        setAllMatchingSelected(false);
     };
     const toggleSelectAll = (e) => {
         if (e.target.checked) {
             setSelectedWorks(works.map(w => w.id));
         } else {
             setSelectedWorks([]);
+            setAllMatchingSelected(false);
         }
     };
 
@@ -280,9 +294,22 @@ const AdminDashboard = () => {
         setLoading(true);
         try {
             await api.put('/works/bulk-assign', {
-                work_ids: selectedWorks,
+                work_ids: allMatchingSelected ? [] : selectedWorks,
+                all_matching: allMatchingSelected,
                 officer_ids: assignmentModal.officerIds.map(id => parseInt(id)),
-                deadline_days: assignmentModal.days ? parseInt(assignmentModal.days) : null
+                deadline_days: assignmentModal.days ? parseInt(assignmentModal.days) : null,
+                // Pass current filters for backend to re-calculate matching set
+                department: filters.department ? [filters.department] : null,
+                block: filters.block ? [filters.block] : null,
+                panchayat: filters.panchayat,
+                status: filters.status,
+                agency: filters.agency,
+                year: filters.year ? [filters.year] : null,
+                search: debouncedSearch,
+                start_date: dateRange.start,
+                end_date: dateRange.end,
+                min_amount: amountRange.min,
+                max_amount: amountRange.max
             });
             alert("Bulk assignment successful!");
             setSelectedWorks([]);
@@ -379,9 +406,10 @@ const AdminDashboard = () => {
             panchayat: [],
             department: '',
             status: [],
-            agency: '',
+            agency: [],
             year: ''
         });
+        setAmountRange({ min: '', max: '' });
         setDateRange({ start: '', end: '' });
         setSearchTerm('');
     };
@@ -903,14 +931,14 @@ const AdminDashboard = () => {
                                         {filterOptions.departments.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                     </select>
             
-                                    <select
-                                        className="bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-32 shadow-sm"
+                                    <MultiSelect
+                                        options={filterOptions.agencies}
                                         value={filters.agency}
-                                        onChange={(e) => setFilters(p => ({ ...p, agency: e.target.value }))}
-                                    >
-                                        <option value="">All Agencies</option>
-                                        {filterOptions.agencies.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                    </select>
+                                        onChange={(val) => setFilters(p => ({ ...p, agency: val }))}
+                                        placeholder="Agencies..."
+                                        label=""
+                                        showSearch={true}
+                                    />
                                 </div>
                             </div>
 
@@ -924,6 +952,29 @@ const AdminDashboard = () => {
                                     label=""
                                     showSearch={false}
                                 />
+                            </div>
+
+                            <div className="flex flex-col gap-1">
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">AS Amount Range</span>
+                                <div className="flex items-center gap-2 bg-white border rounded-lg px-2 py-1.5 shadow-sm h-[38px]">
+                                    <span className="text-gray-400 text-xs font-bold">₹</span>
+                                    <input
+                                        type="number"
+                                        value={amountRange.min}
+                                        onChange={(e) => setAmountRange(p => ({ ...p, min: e.target.value }))}
+                                        className="text-xs outline-none text-gray-700 w-12 bg-transparent"
+                                        placeholder="Min"
+                                    />
+                                    <span className="text-gray-400 text-xs">-</span>
+                                    <input
+                                        type="number"
+                                        value={amountRange.max}
+                                        onChange={(e) => setAmountRange(p => ({ ...p, max: e.target.value }))}
+                                        className="text-xs outline-none text-gray-700 w-12 bg-transparent"
+                                        placeholder="Max"
+                                    />
+                                    <span className="text-[10px] text-gray-400 font-bold uppercase">L</span>
+                                </div>
                             </div>
 
                             <div className="flex flex-col gap-1">
@@ -1167,6 +1218,33 @@ const AdminDashboard = () => {
                         </div>
                     ) : (
                         <div className="h-full overflow-hidden flex flex-col">
+                            {isBulkMode && selectedWorks.length > 0 && pagination.total > works.length && (
+                                <div className="bg-indigo-600 text-white px-4 py-2 text-sm flex items-center justify-between animate-in slide-in-from-top duration-300">
+                                    <div className="flex items-center gap-2">
+                                        <CheckCircle size={16} />
+                                        <span>All <strong>{selectedWorks.length}</strong> works on this page are selected.</span>
+                                        {!allMatchingSelected ? (
+                                            <button 
+                                                onClick={() => setAllMatchingSelected(true)}
+                                                className="ml-2 bg-white/20 hover:bg-white/30 px-2 py-0.5 rounded font-bold transition underline"
+                                            >
+                                                Select all {pagination.total} matching works
+                                            </button>
+                                        ) : (
+                                            <span className="ml-2 font-bold bg-white/20 px-2 py-0.5 rounded">All {pagination.total} matching works are selected.</span>
+                                        )}
+                                    </div>
+                                    {allMatchingSelected && (
+                                        <button 
+                                            onClick={() => { setAllMatchingSelected(false); setSelectedWorks([]); }}
+                                            className="text-xs hover:underline opacity-80"
+                                        >
+                                            Clear Selection
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Table */}
                             {/* Table Card */}
                             <div className="flex-1 overflow-auto p-4">
@@ -1553,8 +1631,25 @@ const AdminDashboard = () => {
                             <div className="space-y-4">
                                 <div>
                                     <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">Select Officers (Tick one or more)</label>
+                                    <div className="mb-2 relative">
+                                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                        <input 
+                                            type="text"
+                                            placeholder="Search officer or agency name..."
+                                            className="w-full pl-9 pr-4 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                                            value={assignmentSearch}
+                                            onChange={(e) => setAssignmentSearch(e.target.value)}
+                                        />
+                                    </div>
                                     <div className="max-h-48 overflow-y-auto border rounded-lg p-2 bg-gray-50 space-y-1">
-                                        {officers.map(off => {
+                                        {officers
+                                            .filter(off => {
+                                                const search = assignmentSearch.toLowerCase();
+                                                return off.username.toLowerCase().includes(search) || 
+                                                       (off.department && off.department.toLowerCase().includes(search)) ||
+                                                       (off.allowed_agencies && off.allowed_agencies.toLowerCase().includes(search));
+                                            })
+                                            .map(off => {
                                             const isSelected = assignmentModal.officerIds.includes(off.id.toString()) || assignmentModal.officerIds.includes(off.id);
                                             return (
                                                 <label key={off.id} className="flex items-center gap-2 p-1.5 hover:bg-white rounded cursor-pointer transition">

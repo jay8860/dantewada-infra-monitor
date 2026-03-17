@@ -391,21 +391,11 @@ async def get_work_locations(
     ]
 
 # --- Filter Helper ---
-def build_works_query(db, user, department, block, panchayat, status, agency, year, search, start_date=None, end_date=None):
-    query = db.query(models.Work).options(joinedload(models.Work.assigned_officer))
-    
-    # helper for list filtering
-    def apply_list_filter(q, col, values):
-        if not values: return q
-        clean_values = [str(v).strip() for v in values if v]
-        if not clean_values: return q
-        return q.filter(col.in_(clean_values))
-
-    query = apply_list_filter(query, models.Work.department, department)
-    query = apply_list_filter(query, models.Work.panchayat, panchayat)
-    query = apply_list_filter(query, models.Work.financial_year, year)
-    query = apply_list_filter(query, models.Work.agency_name, agency)
-    query = apply_list_filter(query, models.Work.current_status, status)
+    # Amount Range Filter
+    if min_amount is not None:
+        query = query.filter(models.Work.sanctioned_amount >= min_amount)
+    if max_amount is not None:
+        query = query.filter(models.Work.sanctioned_amount <= max_amount)
 
     # Date Range Filter (AS Date)
     if start_date:
@@ -575,14 +565,14 @@ async def get_works(
     search: Optional[str] = None,
     sort_by: Optional[str] = None,
     sort_order: Optional[str] = "asc",
-    start_date: Optional[str] = Query(None),
-    end_date: Optional[str] = Query(None),
     skip: int = 0,
     limit: int = 100,
+    min_amount: Optional[float] = Query(None),
+    max_amount: Optional[float] = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user)
 ):
-    query = build_works_query(db, current_user, department, block, panchayat, status, agency, year, search, start_date, end_date)
+    query = build_works_query(db, current_user, department, block, panchayat, status, agency, year, search, start_date, end_date, min_amount, max_amount)
         
     total_count = query.count()
     response.headers["X-Total-Count"] = str(total_count)
@@ -1082,9 +1072,22 @@ async def update_work_admin(
     return {"message": "Updated"}
 
 class BulkAssignRequest(BaseModel):
-    work_ids: List[int]
+    work_ids: Optional[List[int]] = []
     officer_ids: List[int]
     deadline_days: Optional[int] = None
+    all_matching: bool = False
+    # Filter fields for cross-page assign
+    department: Optional[List[str]] = None
+    block: Optional[List[str]] = None
+    panchayat: Optional[List[str]] = None
+    status: Optional[List[str]] = None
+    agency: Optional[List[str]] = None
+    year: Optional[List[str]] = None
+    search: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    min_amount: Optional[float] = None
+    max_amount: Optional[float] = None
 
 @router.put("/works/bulk-assign")
 async def bulk_assign_works(
@@ -1095,23 +1098,53 @@ async def bulk_assign_works(
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
         
-    target_user = db.query(models.User).filter(models.User.id == req.officer_id).first()
-    if not target_user:
-        raise HTTPException(status_code=404, detail="User not found")
-        
-    works = db.query(models.Work).filter(models.Work.id.in_(req.work_ids)).all()
+    if req.all_matching:
+        # Fetch all matching works based on filters
+        query = build_works_query(
+            db, current_user, req.department, req.block, req.panchayat, 
+            req.status, req.agency, req.year, req.search, 
+            req.start_date, req.end_date, req.min_amount, req.max_amount
+        )
+        works = query.all()
+    else:
+        if not req.work_ids:
+            raise HTTPException(status_code=400, detail="No work IDs provided")
+        works = db.query(models.Work).filter(models.Work.id.in_(req.work_ids)).all()
+    
+    if not works:
+        return {"message": "No works found to assign"}
+
     deadline = None
     if req.deadline_days:
         deadline = datetime.utcnow() + timedelta(days=req.deadline_days)
         
+    work_ids = [w.id for w in works]
+    
+    # 1. Update Work table (Legacy/Primary reference)
     for w in works:
-        w.assigned_officer_id = target_user.id
         w.assignment_status = "Assigned"
         if deadline:
             w.inspection_deadline = deadline
+        if req.officer_ids:
+            w.assigned_officer_id = req.officer_ids[0]
+
+    # 2. Update WorkAssignment table (Actual Multi-Assignment)
+    # Clear existing assignments for these works if needed? 
+    # Usually better to overwrite or add. Let's append new ones, or refresh.
+    # User said "assign bulk assign in all works", usually means reset to these officers.
+    db.query(models.WorkAssignment).filter(models.WorkAssignment.work_id.in_(work_ids)).delete(synchronize_session=False)
+
+    for w_id in work_ids:
+        for o_id in req.officer_ids:
+            new_assign = models.WorkAssignment(
+                work_id=w_id,
+                user_id=o_id,
+                deadline=deadline
+            )
+            db.add(new_assign)
             
     db.commit()
-    return {"message": f"Successfully assigned {len(works)} works to {target_user.username}"}
+    return {"message": f"Successfully assigned {len(works)} works to {len(req.officer_ids)} officers"}
 
 # =============================================
 # WORK PHOTOS - Upload, List, Delete
