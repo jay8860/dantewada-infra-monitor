@@ -21,8 +21,9 @@ const OfficerDashboard = () => {
     const [isDrawerOpen, setIsDrawerOpen] = useState(false); // NEW: Historical Context
     const [searchTerm, setSearchTerm] = useState('');
 
-    // Pagination
+    // Pagination & Sorting
     const [currentPage, setCurrentPage] = useState(1);
+    const [sortBy, setSortBy] = useState('as_date_desc'); // Default: Newest AS Date
     const ITEMS_PER_PAGE = 20;
 
     // Form State
@@ -54,7 +55,8 @@ const OfficerDashboard = () => {
         try {
             // Fetch only explicitly assigned works for "My Inspections" tab
             const assignedResp = await api.get('/works/my-assignments');
-            setAssignedWorks(assignedResp.data);
+            // Filter out completed works from inspections tab
+            setAssignedWorks(assignedResp.data.filter(w => w.current_status !== 'Completed'));
 
             // Fetch agency-filtered works for "All Works" tab (backend applies privacy filter)
             const allResp = await api.get('/works', { params: { limit: 2000 } });
@@ -85,7 +87,6 @@ const OfficerDashboard = () => {
         return { color: 'bg-green-100 text-green-700 border-green-200', label: `Due in ${diffDays}d` };
     };
 
-    // --- Filtering & Pagination ---
     const getPaginatedData = () => {
         let sourceList = activeTab === 'assignments' ? assignedWorks : allWorks;
 
@@ -99,6 +100,26 @@ const OfficerDashboard = () => {
                 (w.panchayat && w.panchayat.toLowerCase().includes(low))
             );
         }
+
+        // Sorting logic
+        sourceList = [...sourceList].sort((a, b) => {
+            switch (sortBy) {
+                case 'as_amount_desc':
+                    return (b.sanctioned_amount || 0) - (a.sanctioned_amount || 0);
+                case 'as_amount_asc':
+                    return (a.sanctioned_amount || 0) - (b.sanctioned_amount || 0);
+                case 'as_date_desc':
+                    return new Date(b.sanctioned_date || 0) - new Date(a.sanctioned_date || 0);
+                case 'as_date_asc':
+                    return new Date(a.sanctioned_date || 0) - new Date(b.sanctioned_date || 0);
+                case 'status':
+                    return (a.current_status || '').localeCompare(b.current_status || '');
+                case 'id_desc':
+                    return b.id - a.id;
+                default:
+                    return b.id - a.id;
+            }
+        });
 
         const totalPages = Math.ceil(sourceList.length / ITEMS_PER_PAGE);
         const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -508,6 +529,21 @@ const OfficerDashboard = () => {
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
+                    <div className="mt-2 flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Sort By:</span>
+                        <select 
+                            value={sortBy} 
+                            onChange={(e) => setSortBy(e.target.value)}
+                            className="text-xs border-none bg-transparent font-bold text-blue-600 outline-none cursor-pointer"
+                        >
+                            <option value="as_date_desc">Newest AS Date</option>
+                            <option value="as_date_asc">Oldest AS Date</option>
+                            <option value="as_amount_desc">AS Amount (High-Low)</option>
+                            <option value="as_amount_asc">AS Amount (Low-High)</option>
+                            <option value="status">Status</option>
+                            <option value="id_desc">Newest ID</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -526,7 +562,8 @@ const OfficerDashboard = () => {
                                         <tr>
                                             <th className="px-4 py-3 w-16">ID</th>
                                             <th className="px-4 py-3">Work Name</th>
-                                            <th className="px-4 py-3">Location</th>
+                                            <th className="px-4 py-3">AS Amount</th>
+                                            <th className="px-4 py-3 hidden md:table-cell">AS Date</th>
                                             <th className="px-4 py-3">Status</th>
                                             {activeTab === 'assignments' && <th className="px-4 py-3">Deadline</th>}
                                             <th className="px-4 py-3 text-right">Action</th>
@@ -539,11 +576,14 @@ const OfficerDashboard = () => {
                                                     <td className="px-4 py-3 font-mono text-xs text-gray-400">{work.id}</td>
                                                     <td className="px-4 py-3 max-w-xs">
                                                         <div className="font-bold text-gray-800 line-clamp-2">{work.work_name}</div>
-                                                        <div className="text-xs text-gray-500 mt-1 font-mono">{work.work_code}</div>
+                                                        <div className="text-[10px] text-gray-400 mt-1 uppercase">{work.block} | {work.panchayat}</div>
+                                                        <div className="text-[10px] text-gray-400 font-mono">{work.work_code}</div>
                                                     </td>
-                                                    <td className="px-4 py-3">
-                                                        <div className="text-gray-700">{work.panchayat}</div>
-                                                        <div className="text-xs text-gray-500">{work.block}</div>
+                                                    <td className="px-4 py-3 font-bold text-blue-700">
+                                                        ₹{work.sanctioned_amount} L
+                                                    </td>
+                                                    <td className="px-4 py-3 hidden md:table-cell text-gray-500">
+                                                        {work.sanctioned_date ? new Date(work.sanctioned_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short', year: 'numeric'}) : '-'}
                                                     </td>
                                                     <td className="px-4 py-3">
                                                         <span className={`inline-flex px-2 py-1 rounded text-xs font-bold uppercase ${work.current_status === 'Completed' ? 'bg-green-100 text-green-700' :

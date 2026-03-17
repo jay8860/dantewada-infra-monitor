@@ -866,7 +866,7 @@ const AdminDashboard = () => {
                     </div>
 
                     {/* Collapsible Filter Bar */}
-                    <div className={`overflow-hidden transition-all duration-300 ease-in-out ${showFilters ? 'max-h-96 opacity-100 border-t bg-gray-50/50' : 'max-h-0 opacity-0'}`}>
+                    <div className={`transition-all duration-300 ease-in-out ${showFilters ? 'max-h-96 opacity-100 border-t bg-gray-50/50 overflow-visible' : 'max-h-0 opacity-0 overflow-hidden'}`}>
                         <div className="p-4 flex flex-wrap gap-4 items-center">
                             <div className="flex flex-col gap-1">
                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Location</span>
