@@ -300,9 +300,40 @@ async def get_work_locations(
     agency: Optional[List[str]] = Query(None),
     year: Optional[List[str]] = Query(None),
     search: Optional[str] = None,
-    db: Session = Depends(get_db)
+    min_amount: Optional[str] = Query(None),
+    max_amount: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
 ):
-    query = db.query(
+    # Parse numeric filters safely
+    parsed_min = None
+    if min_amount and str(min_amount).strip():
+        try: parsed_min = float(min_amount)
+        except: pass
+        
+    parsed_max = None
+    if max_amount and str(max_amount).strip():
+        try: parsed_max = float(max_amount)
+        except: pass
+
+    # Parse date filters safely
+    parsed_start = None
+    if start_date and str(start_date).strip():
+        try: parsed_start = datetime.fromisoformat(str(start_date).replace('Z', '+00:00'))
+        except: pass
+
+    parsed_end = None
+    if end_date and str(end_date).strip():
+        try: parsed_end = datetime.fromisoformat(str(end_date).replace('Z', '+00:00'))
+        except: pass
+
+    # Use centralized query builder
+    query = build_works_query(db, current_user, department, block, panchayat, status, agency, year, search, parsed_start, parsed_end, parsed_min, parsed_max)
+    
+    # Select only needed columns for map performance
+    query = query.with_entities(
         models.Work.id, 
         models.Work.latitude, 
         models.Work.longitude, 
@@ -313,82 +344,12 @@ async def get_work_locations(
         models.Work.block,
         models.Work.panchayat,
         models.Work.assigned_officer_id,
-        models.Work.remark # Added for coloring logic
+        models.Work.remark
     )
     
-    # helper for list filtering
-    def apply_list_filter(q, col, values):
-        if not values: return q
-        # Handle cases where value might be empty string
-        clean_values = [str(v).strip().lower() for v in values if v]
-        if not clean_values: return q
-        # Use trim + lower for robust matching against sloppy data (e.g. "Dantewada " vs "Dantewada")
-        # SQLite uses trim(), Postgres uses trim().
-        return q.filter(func.trim(func.lower(col)).in_(clean_values))
-
-    query = apply_list_filter(query, models.Work.department, department)
-    query = apply_list_filter(query, models.Work.panchayat, panchayat)
-    query = apply_list_filter(query, models.Work.financial_year, year)
-    query = apply_list_filter(query, models.Work.agency_name, agency)
-    query = apply_list_filter(query, models.Work.current_status, status)
-
-    # Special Block Logic
-    if block:
-        clean_blocks = [b for b in block if b]
-        if clean_blocks:
-            # Check for special "District/Block Level Works" flag
-            SPECIAL_FLAG = "District/Block Level Works"
-            if SPECIAL_FLAG in clean_blocks:
-                # Remove flag from standard block list
-                std_blocks = [b for b in clean_blocks if b != SPECIAL_FLAG]
-                
-                from sqlalchemy import or_
-                # Logic: (Block IN std_blocks) OR (Is District/Block Level Work)
-                # District/Block Level Works are identified by Panchayat name
-                block_cond = models.Work.block.in_(std_blocks) if std_blocks else None
-                special_cond = or_(
-                    models.Work.panchayat.ilike("Block Level%"),
-                    models.Work.panchayat.ilike("District Level%")
-                )
-                
-                if block_cond is not None:
-                     query = query.filter(or_(block_cond, special_cond))
-                else:
-                     query = query.filter(special_cond)
-            else:
-                query = query.filter(models.Work.block.in_(clean_blocks))
-
-    if search:
-
-        search_term = f"%{search}%"
-        from sqlalchemy import or_
-        query = query.filter(or_(
-            models.Work.work_name.ilike(search_term),
-            models.Work.work_code.ilike(search_term)
-        ))
-        
-    # Only return works with coordinates
-    query = query.filter(models.Work.latitude != None, models.Work.longitude != None)
-    
     results = query.all()
-    
-    # Convert to lightweight dict list
-    return [
-        {
-            "id": r.id,
-            "lat": r.latitude,
-            "lng": r.longitude,
-            "current_status": r.current_status, # Fixed key for frontend
-            "remark": r.remark, # Added for color logic
-            "title": r.work_name,
-            "code": r.work_code,
-            "dept": r.department,
-            "block": r.block,
-            "gp": r.panchayat,
-            "assigned": True if r.assigned_officer_id else False
-        }
-        for r in results
-    ]
+    # Convert to dict format expected by frontend
+    return [dict(zip(['id', 'latitude', 'longitude', 'current_status', 'work_name', 'work_code', 'department', 'block', 'panchayat', 'assigned_officer_id', 'remark'], r)) for r in results]
 
 # --- Filter Helper ---
 def build_works_query(
