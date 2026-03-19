@@ -293,6 +293,7 @@ async def get_village_summary(
 
 @router.get("/works/locations")
 async def get_work_locations(
+    response: Response,
     department: Optional[List[str]] = Query(None), 
     block: Optional[List[str]] = Query(None),
     panchayat: Optional[List[str]] = Query(None),
@@ -544,6 +545,7 @@ async def get_my_assignments(
 
 @router.get("/works")
 async def get_works(
+    response: Response,
     department: Optional[List[str]] = Query(None), 
     block: Optional[List[str]] = Query(None),
     panchayat: Optional[List[str]] = Query(None),
@@ -560,8 +562,7 @@ async def get_works(
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user),
-    response: Response = None
+    current_user: models.User = Depends(auth.get_current_user)
 ):
     # Parse numeric filters safely
     parsed_min = None
