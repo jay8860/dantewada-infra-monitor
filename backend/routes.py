@@ -429,25 +429,26 @@ def build_works_query(
         restriction_filters = []
         any_restriction = False
         
+        # Match case-insensitively
         # 1. Agency restriction
         if user.allowed_agencies:
-            agencies = [a.strip() for a in user.allowed_agencies.split(',') if a.strip()]
+            agencies = [a.strip().lower() for a in user.allowed_agencies.split(',') if a.strip()]
             if agencies:
-                restriction_filters.append(models.Work.agency_name.in_(agencies))
+                restriction_filters.append(func.trim(func.lower(models.Work.agency_name)).in_(agencies))
                 any_restriction = True
         
         # 2. Block restriction
         if user.allowed_blocks:
-            blocks = [b.strip() for b in user.allowed_blocks.split(',') if b.strip()]
+            blocks = [b.strip().lower() for b in user.allowed_blocks.split(',') if b.strip()]
             if blocks:
-                restriction_filters.append(models.Work.block.in_(blocks))
+                restriction_filters.append(func.trim(func.lower(models.Work.block)).in_(blocks))
                 any_restriction = True
                 
         # 3. Panchayat restriction
         if user.allowed_panchayats:
-            panchayats = [p.strip() for p in user.allowed_panchayats.split(',') if p.strip()]
+            panchayats = [p.strip().lower() for p in user.allowed_panchayats.split(',') if p.strip()]
             if panchayats:
-                restriction_filters.append(models.Work.panchayat.in_(panchayats))
+                restriction_filters.append(func.trim(func.lower(models.Work.panchayat)).in_(panchayats))
                 any_restriction = True
 
         # Explicit assignments override (OR)
@@ -543,7 +544,6 @@ async def get_my_assignments(
 
 @router.get("/works")
 async def get_works(
-    response: Response,
     department: Optional[List[str]] = Query(None), 
     block: Optional[List[str]] = Query(None),
     panchayat: Optional[List[str]] = Query(None),
@@ -560,7 +560,8 @@ async def get_works(
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+    current_user: models.User = Depends(auth.get_current_user),
+    response: Response = None
 ):
     # Parse numeric filters safely
     parsed_min = None
