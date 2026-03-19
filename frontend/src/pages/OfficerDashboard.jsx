@@ -56,7 +56,7 @@ const OfficerDashboard = () => {
             // Fetch only explicitly assigned works for "My Inspections" tab
             const assignedResp = await api.get('/works/my-assignments');
             // Filter out completed works from inspections tab
-            setAssignedWorks(assignedResp.data.filter(w => w.current_status !== 'Completed'));
+            setAssignedWorks(assignedResp.data);
 
             // Fetch agency-filtered works for "All Works" tab (backend applies privacy filter)
             const allResp = await api.get('/works', { params: { limit: 2000 } });

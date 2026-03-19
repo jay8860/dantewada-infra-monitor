@@ -1250,8 +1250,8 @@ async def bulk_auto_assign_system(
     
     # Cutoff: 31st March 2025
     cutoff_date = datetime(2025, 3, 31, 23, 59, 59)
-    # Default Deadline: 30 days from now
-    deadline = datetime.utcnow() + timedelta(days=30)
+    # Default Deadline: 15 days from now
+    deadline = datetime.utcnow() + timedelta(days=15)
     
     officers = db.query(models.User).filter(
         models.User.role == "officer",
@@ -1259,14 +1259,20 @@ async def bulk_auto_assign_system(
         models.User.allowed_agencies != ""
     ).all()
     
-    total_assigned = 0
-    for officer in officers:
-        agency_list = [a.strip() for a in officer.allowed_agencies.split(",") if a.strip()]
-        if not agency_list:
-            continue
+    # Group officers by agency
+    agency_to_officers = {}
+    for off in officers:
+        agencies = [a.strip() for a in off.allowed_agencies.split(",") if a.strip()]
+        for ag in agencies:
+            if ag not in agency_to_officers:
+                agency_to_officers[ag] = []
+            agency_to_officers[ag].append(off)
             
+    total_assigned = 0
+    # Process by agency to avoid redundant clearing
+    for agency_name, officer_list in agency_to_officers.items():
         works = db.query(models.Work).filter(
-            models.Work.agency_name.in_(agency_list),
+            models.Work.agency_name == agency_name,
             models.Work.sanctioned_amount >= 10,
             models.Work.current_status != "Completed",
             models.Work.sanctioned_date <= cutoff_date
@@ -1276,23 +1282,26 @@ async def bulk_auto_assign_system(
             continue
             
         for work in works:
-            # Clear existing
+            # Clear existing assignments once per work
             db.query(models.WorkAssignment).filter(models.WorkAssignment.work_id == work.id).delete()
             
-            # Update
-            work.assigned_officer_id = officer.id
+            # Use the first officer as the primary reference in Work table
+            primary_officer = officer_list[0]
+            work.assigned_officer_id = primary_officer.id
             work.assignment_status = "Assigned"
             work.inspection_deadline = deadline
             
-            db.add(models.WorkAssignment(
-                work_id=work.id,
-                user_id=officer.id,
-                deadline=deadline
-            ))
+            # Create WorkAssignment for ALL officers in this agency's group
+            for off in officer_list:
+                db.add(models.WorkAssignment(
+                    work_id=work.id,
+                    user_id=off.id,
+                    deadline=deadline
+                ))
             total_assigned += 1
             
     db.commit()
-    return {"message": f"Successfully performed auto-assignment for {total_assigned} works (Pre-April 2025, >=10L)"}
+    return {"message": f"Successfully performed auto-assignment for {total_assigned} works (Pre-April 2025, >=10L, 15d deadline)"}
 
 # =============================================
 # WORK PHOTOS - Upload, List, Delete
