@@ -389,9 +389,10 @@ def build_works_query(
     # List filters (Department, Panchayat, Year, Agency, Status)
     def apply_list_filter(q, col, values):
         if not values: return q
-        clean_values = [str(v).strip().lower() for v in values if v]
+        # Normalize non-breaking spaces \u00a0 to standard space
+        clean_values = [str(v).strip().lower().replace('\u00a0', ' ') for v in values if v]
         if not clean_values: return q
-        return q.filter(func.trim(func.lower(col)).in_(clean_values))
+        return q.filter(func.replace(func.trim(func.lower(col)), '\u00a0', ' ').in_(clean_values))
 
     query = apply_list_filter(query, models.Work.department, department)
     query = apply_list_filter(query, models.Work.panchayat, panchayat)
@@ -430,26 +431,26 @@ def build_works_query(
         restriction_filters = []
         any_restriction = False
         
-        # Match case-insensitively
+        # Match case-insensitively and normalize spaces (\u00a0 -> ' ')
         # 1. Agency restriction
         if user.allowed_agencies:
-            agencies = [a.strip().lower() for a in user.allowed_agencies.split(',') if a.strip()]
+            agencies = [a.strip().lower().replace('\u00a0', ' ') for a in user.allowed_agencies.split(',') if a.strip()]
             if agencies:
-                restriction_filters.append(func.trim(func.lower(models.Work.agency_name)).in_(agencies))
+                restriction_filters.append(func.replace(func.trim(func.lower(models.Work.agency_name)), '\u00a0', ' ').in_(agencies))
                 any_restriction = True
         
         # 2. Block restriction
         if user.allowed_blocks:
-            blocks = [b.strip().lower() for b in user.allowed_blocks.split(',') if b.strip()]
+            blocks = [b.strip().lower().replace('\u00a0', ' ') for b in user.allowed_blocks.split(',') if b.strip()]
             if blocks:
-                restriction_filters.append(func.trim(func.lower(models.Work.block)).in_(blocks))
+                restriction_filters.append(func.replace(func.trim(func.lower(models.Work.block)), '\u00a0', ' ').in_(blocks))
                 any_restriction = True
                 
         # 3. Panchayat restriction
         if user.allowed_panchayats:
-            panchayats = [p.strip().lower() for p in user.allowed_panchayats.split(',') if p.strip()]
+            panchayats = [p.strip().lower().replace('\u00a0', ' ') for p in user.allowed_panchayats.split(',') if p.strip()]
             if panchayats:
-                restriction_filters.append(func.trim(func.lower(models.Work.panchayat)).in_(panchayats))
+                restriction_filters.append(func.replace(func.trim(func.lower(models.Work.panchayat)), '\u00a0', ' ').in_(panchayats))
                 any_restriction = True
 
         # Explicit assignments override (OR)
@@ -466,11 +467,9 @@ def build_works_query(
             restriction_cond = and_(*restriction_filters)
             # Match restrictions OR be explicitly assigned
             query = query.filter(or_(restriction_cond, explicit_cond))
+            print(f"DEBUG: User={user.username}, any_restriction={any_restriction}, agencies={user.allowed_agencies}, blocks={user.allowed_blocks}")
         else:
-            # If no specific restrictions are set, we assume full access (if that's the intended project policy)
-            # However, if the project intention for officers is to only ever see assigned works unless agencies are set:
-            # query = query.filter(explicit_cond)
-            # Given the UI says "Leave empty for full access", we allow full access.
+            # If no specific restrictions are set, we allow full access
             pass
 
 
