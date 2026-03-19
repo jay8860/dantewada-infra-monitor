@@ -101,6 +101,7 @@ const AdminDashboard = () => {
         year: ''
     });
     const [amountRange, setAmountRange] = useState({ min: '', max: '' }); // NEW: Amount Range Filter
+    const debouncedAmountRange = useDebounce(amountRange, 800); // 800ms delay for number typing
     const [dateRange, setDateRange] = useState({ start: '', end: '' });
 
     // --- Fetch TABLE Works (Paginated) ---
@@ -129,8 +130,8 @@ const AdminDashboard = () => {
             if (dateRange.end) params.append('end_date', dateRange.end);
 
             // Amount Range
-            if (amountRange.min) params.append('min_amount', amountRange.min);
-            if (amountRange.max) params.append('max_amount', amountRange.max);
+            if (debouncedAmountRange.min) params.append('min_amount', debouncedAmountRange.min);
+            if (debouncedAmountRange.max) params.append('max_amount', debouncedAmountRange.max);
 
             if (debouncedSearch) params.append('search', debouncedSearch);
             if (sortConfig.key) {
@@ -153,7 +154,7 @@ const AdminDashboard = () => {
         } finally {
             setLoading(false);
         }
-    }, [pagination.page, pagination.limit, filters, dateRange, debouncedSearch, sortConfig]);
+    }, [pagination.page, pagination.limit, filters, dateRange, debouncedAmountRange, debouncedSearch, sortConfig]);
 
     // --- Fetch MAP Works (All Points) ---
     const fetchMapWorks = useCallback(async () => {
@@ -174,8 +175,8 @@ const AdminDashboard = () => {
             if (dateRange.end) params.append('end_date', dateRange.end);
 
             // Amount Range for Map
-            if (amountRange.min) params.append('min_amount', amountRange.min);
-            if (amountRange.max) params.append('max_amount', amountRange.max);
+            if (debouncedAmountRange.min) params.append('min_amount', debouncedAmountRange.min);
+            if (debouncedAmountRange.max) params.append('max_amount', debouncedAmountRange.max);
 
             if (debouncedSearch) params.append('search', debouncedSearch);
 
@@ -186,7 +187,7 @@ const AdminDashboard = () => {
         } finally {
             setMapLoading(false);
         }
-    }, [viewMode, filters, dateRange, debouncedSearch]);
+    }, [viewMode, filters, dateRange, debouncedAmountRange, debouncedSearch]);
 
     // ... (keeping fetchSummary as is, or should update it too? User only asked for "showing works" which implies table list. 
     // Usually summary aggregation ignores detailed date filters unless requested. Staying safe.)
