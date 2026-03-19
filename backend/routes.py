@@ -391,6 +391,23 @@ async def get_work_locations(
     ]
 
 # --- Filter Helper ---
+def build_works_query(
+    db: Session,
+    user: models.User,
+    department: Optional[List[str]] = None,
+    block: Optional[List[str]] = None,
+    panchayat: Optional[List[str]] = None,
+    status: Optional[List[str]] = None,
+    agency: Optional[List[str]] = None,
+    year: Optional[List[str]] = None,
+    search: Optional[str] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None
+):
+    query = db.query(models.Work)
+
     # Amount Range Filter
     if min_amount is not None:
         query = query.filter(models.Work.sanctioned_amount >= min_amount)
@@ -399,16 +416,26 @@ async def get_work_locations(
 
     # Date Range Filter (AS Date)
     if start_date:
-        query = query.filter(models.Work.sanctioned_date >= start_date)
+        # Standardize to beginning of day
+        start_dt = datetime.combine(start_date.date(), datetime.min.time())
+        query = query.filter(models.Work.sanctioned_date >= start_dt)
     if end_date:
-        # Include the entire end day? If date only, <= matches 00:00:00 of that day usually unless time present.
-        # If input is YYYY-MM-DD, and DB is DateTime, <= YYYY-MM-DD 00:00:00 excludes the day.
-        # Let's assume inclusive end date by adding one day or checking logic. 
-        # But safest given input type might be date string:
-        # If user sends YYYY-MM-DD, we should probably cast or ensure logic. 
-        # For simplicity, assuming frontend and DB align, but let's be careful.
-        # User requested "Today" so they likely mean >= Start AND <= End (Inclusive).
-        query = query.filter(models.Work.sanctioned_date <= end_date)
+        # Standardize to end of day
+        end_dt = datetime.combine(end_date.date(), datetime.max.time())
+        query = query.filter(models.Work.sanctioned_date <= end_dt)
+
+    # List filters (Department, Panchayat, Year, Agency, Status)
+    def apply_list_filter(q, col, values):
+        if not values: return q
+        clean_values = [str(v).strip().lower() for v in values if v]
+        if not clean_values: return q
+        return q.filter(func.trim(func.lower(col)).in_(clean_values))
+
+    query = apply_list_filter(query, models.Work.department, department)
+    query = apply_list_filter(query, models.Work.panchayat, panchayat)
+    query = apply_list_filter(query, models.Work.financial_year, year)
+    query = apply_list_filter(query, models.Work.agency_name, agency)
+    query = apply_list_filter(query, models.Work.current_status, status)
 
     # Special Block Logic
     if block:
@@ -567,12 +594,36 @@ async def get_works(
     sort_order: Optional[str] = "asc",
     skip: int = 0,
     limit: int = 100,
-    min_amount: Optional[float] = Query(None),
-    max_amount: Optional[float] = Query(None),
+    min_amount: Optional[str] = Query(None),
+    max_amount: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user)
 ):
-    query = build_works_query(db, current_user, department, block, panchayat, status, agency, year, search, start_date, end_date, min_amount, max_amount)
+    # Parse numeric filters safely
+    parsed_min = None
+    if min_amount and str(min_amount).strip():
+        try: parsed_min = float(min_amount)
+        except: pass
+        
+    parsed_max = None
+    if max_amount and str(max_amount).strip():
+        try: parsed_max = float(max_amount)
+        except: pass
+
+    # Parse date filters safely
+    parsed_start = None
+    if start_date and str(start_date).strip():
+        try: parsed_start = datetime.fromisoformat(str(start_date).replace('Z', '+00:00'))
+        except: pass
+
+    parsed_end = None
+    if end_date and str(end_date).strip():
+        try: parsed_end = datetime.fromisoformat(str(end_date).replace('Z', '+00:00'))
+        except: pass
+
+    query = build_works_query(db, current_user, department, block, panchayat, status, agency, year, search, parsed_start, parsed_end, parsed_min, parsed_max)
         
     total_count = query.count()
     response.headers["X-Total-Count"] = str(total_count)
@@ -670,11 +721,37 @@ async def export_works(
     search: Optional[str] = None,
     sort_by: Optional[str] = None,
     sort_order: Optional[str] = "asc",
+    min_amount: Optional[str] = Query(None),
+    max_amount: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user)
 ):
     try:
-        query = build_works_query(db, current_user, department, block, panchayat, status, agency, year, search)
+        # Parse numeric filters safely
+        parsed_min = None
+        if min_amount and str(min_amount).strip():
+            try: parsed_min = float(min_amount)
+            except: pass
+            
+        parsed_max = None
+        if max_amount and str(max_amount).strip():
+            try: parsed_max = float(max_amount)
+            except: pass
+
+        # Parse date filters safely
+        parsed_start = None
+        if start_date and str(start_date).strip():
+            try: parsed_start = datetime.fromisoformat(str(start_date).replace('Z', '+00:00'))
+            except: pass
+
+        parsed_end = None
+        if end_date and str(end_date).strip():
+            try: parsed_end = datetime.fromisoformat(str(end_date).replace('Z', '+00:00'))
+            except: pass
+
+        query = build_works_query(db, current_user, department, block, panchayat, status, agency, year, search, parsed_start, parsed_end, parsed_min, parsed_max)
         query = apply_sorting(query, sort_by, sort_order)
         results = query.all()
         print(f"DEBUG: Export found {len(results)} rows")
@@ -747,12 +824,38 @@ async def export_works_pdf(
     search: Optional[str] = None,
     sort_by: Optional[str] = None,
     sort_order: Optional[str] = "asc",
+    min_amount: Optional[str] = Query(None),
+    max_amount: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
     current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db)
 ):
     try:
+        # Parse numeric filters safely
+        parsed_min = None
+        if min_amount and str(min_amount).strip():
+            try: parsed_min = float(min_amount)
+            except: pass
+            
+        parsed_max = None
+        if max_amount and str(max_amount).strip():
+            try: parsed_max = float(max_amount)
+            except: pass
+
+        # Parse date filters safely
+        parsed_start = None
+        if start_date and str(start_date).strip():
+            try: parsed_start = datetime.fromisoformat(str(start_date).replace('Z', '+00:00'))
+            except: pass
+
+        parsed_end = None
+        if end_date and str(end_date).strip():
+            try: parsed_end = datetime.fromisoformat(str(end_date).replace('Z', '+00:00'))
+            except: pass
+
         # 1. Fetch filtered works
-        query = build_works_query(db, current_user, department, block, panchayat, status, agency, year, search)
+        query = build_works_query(db, current_user, department, block, panchayat, status, agency, year, search, parsed_start, parsed_end, parsed_min, parsed_max)
         query = apply_sorting(query, sort_by, sort_order)
         # Limit to prevent massive un-renderable PDFs
         works = query.limit(500).all()
@@ -1086,8 +1189,8 @@ class BulkAssignRequest(BaseModel):
     search: Optional[str] = None
     start_date: Optional[str] = None
     end_date: Optional[str] = None
-    min_amount: Optional[float] = None
-    max_amount: Optional[float] = None
+    min_amount: Optional[str] = None
+    max_amount: Optional[str] = None
 
 @router.put("/works/bulk-assign")
 async def bulk_assign_works(
@@ -1099,11 +1202,33 @@ async def bulk_assign_works(
         raise HTTPException(status_code=403, detail="Admin access required")
         
     if req.all_matching:
+        # Parse numeric filters safely
+        parsed_min = None
+        if req.min_amount and str(req.min_amount).strip():
+            try: parsed_min = float(req.min_amount)
+            except: pass
+            
+        parsed_max = None
+        if req.max_amount and str(req.max_amount).strip():
+            try: parsed_max = float(req.max_amount)
+            except: pass
+
+        # Parse date filters safely
+        parsed_start = None
+        if req.start_date and str(req.start_date).strip():
+            try: parsed_start = datetime.fromisoformat(str(req.start_date).replace('Z', '+00:00'))
+            except: pass
+
+        parsed_end = None
+        if req.end_date and str(req.end_date).strip():
+            try: parsed_end = datetime.fromisoformat(str(req.end_date).replace('Z', '+00:00'))
+            except: pass
+
         # Fetch all matching works based on filters
         query = build_works_query(
             db, current_user, req.department, req.block, req.panchayat, 
             req.status, req.agency, req.year, req.search, 
-            req.start_date, req.end_date, req.min_amount, req.max_amount
+            parsed_start, parsed_end, parsed_min, parsed_max
         )
         works = query.all()
     else:
