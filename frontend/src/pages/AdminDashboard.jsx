@@ -327,6 +327,7 @@ const AdminDashboard = () => {
             alert(`Failed: ${e.response?.data?.detail || e.message}`);
         } finally {
             setLoading(false);
+        }
     };
 
 
