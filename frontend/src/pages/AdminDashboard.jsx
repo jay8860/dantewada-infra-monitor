@@ -324,7 +324,9 @@ const AdminDashboard = () => {
             fetchWorks();
         } catch (e) {
             console.error("Bulk assignment failed", e);
-            alert(`Failed: ${e.response?.data?.detail || e.message}`);
+            const detail = e.response?.data?.detail;
+            const errorMsg = typeof detail === 'object' ? JSON.stringify(detail) : (detail || e.message);
+            alert(`Failed: ${errorMsg}`);
         } finally {
             setLoading(false);
         }
@@ -592,7 +594,9 @@ const AdminDashboard = () => {
             fetchWorks();
         } catch (e) {
             console.error("Bulk unassign failed", e);
-            alert(`Failed: ${e.response?.data?.detail || e.message}`);
+            const detail = e.response?.data?.detail;
+            const errorMsg = typeof detail === 'object' ? JSON.stringify(detail) : (detail || e.message);
+            alert(`Failed: ${errorMsg}`);
         }
     };
 
@@ -1629,7 +1633,7 @@ const AdminDashboard = () => {
                                     >
                                         <option value="">-- Choose Agency --</option>
                                         {officers.map(off => (
-                                            <option key={off.id} value={off.username}>{off.username} ({off.allowed_agencies || 'All'})</option>
+                                            <option key={off.id} value={off.id}>{off.username} ({off.allowed_agencies || 'All'})</option>
                                         ))}
                                     </select>
                                 </div>
