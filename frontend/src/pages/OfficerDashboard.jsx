@@ -61,8 +61,12 @@ const OfficerDashboard = () => {
             // Fetch agency-filtered works for "All Works" tab (backend applies privacy filter)
             const allResp = await api.get('/works', { params: { limit: 2000 } });
             setAllWorks(allResp.data);
+            if (allResp.data.length === 0) {
+                console.log("DEBUG: All Works returned 0 items");
+            }
         } catch (error) {
             console.error("Fetch works failed", error);
+            alert("Fetch works failed: " + (error.response?.data?.detail || error.message));
         } finally {
             setLoading(false);
         }
