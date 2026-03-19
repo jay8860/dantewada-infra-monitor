@@ -1239,6 +1239,61 @@ async def bulk_assign_works(
     msg = f"Successfully assigned {len(works)} works to {len(req.officer_ids)} officers" if req.officer_ids else f"Successfully unassigned {len(works)} works"
     return {"message": msg}
 
+@router.post("/works/admin/auto-assign")
+async def bulk_auto_assign_system(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Automated bulk assignment for works >= 10L sanctioned before April 2025."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Cutoff: 31st March 2025
+    cutoff_date = datetime(2025, 3, 31, 23, 59, 59)
+    # Default Deadline: 30 days from now
+    deadline = datetime.utcnow() + timedelta(days=30)
+    
+    officers = db.query(models.User).filter(
+        models.User.role == "officer",
+        models.User.allowed_agencies.isnot(None),
+        models.User.allowed_agencies != ""
+    ).all()
+    
+    total_assigned = 0
+    for officer in officers:
+        agency_list = [a.strip() for a in officer.allowed_agencies.split(",") if a.strip()]
+        if not agency_list:
+            continue
+            
+        works = db.query(models.Work).filter(
+            models.Work.agency_name.in_(agency_list),
+            models.Work.sanctioned_amount >= 10,
+            models.Work.current_status != "Completed",
+            models.Work.sanctioned_date <= cutoff_date
+        ).all()
+        
+        if not works:
+            continue
+            
+        for work in works:
+            # Clear existing
+            db.query(models.WorkAssignment).filter(models.WorkAssignment.work_id == work.id).delete()
+            
+            # Update
+            work.assigned_officer_id = officer.id
+            work.assignment_status = "Assigned"
+            work.inspection_deadline = deadline
+            
+            db.add(models.WorkAssignment(
+                work_id=work.id,
+                user_id=officer.id,
+                deadline=deadline
+            ))
+            total_assigned += 1
+            
+    db.commit()
+    return {"message": f"Successfully performed auto-assignment for {total_assigned} works (Pre-April 2025, >=10L)"}
+
 # =============================================
 # WORK PHOTOS - Upload, List, Delete
 # =============================================

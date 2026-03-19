@@ -3,7 +3,7 @@ import api from '../api';
 import MapComponent from '../components/MapComponent';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { LayoutDashboard, MapPin, Upload, LogOut, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, RefreshCw, RotateCcw, Calendar, Users, Plus, Edit, UserX, CheckCircle, ArrowDownWideNarrow, Check, X, Image as ImageIcon, FileText, ChevronDown, Trash2 } from 'lucide-react';
+import { LayoutDashboard, MapPin, Upload, LogOut, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, RefreshCw, RotateCcw, Calendar, Users, Plus, Edit, UserX, CheckCircle, ArrowDownWideNarrow, Check, X, Image as ImageIcon, FileText, ChevronDown, Trash2, Zap } from 'lucide-react';
 import WorkDetailDrawer from '../components/WorkDetailDrawer';
 import MultiSelect from '../components/MultiSelect';
 import VillageSummaryTable from '../components/VillageSummaryTable';
@@ -324,6 +324,24 @@ const AdminDashboard = () => {
             fetchWorks();
         } catch (e) {
             console.error("Bulk assignment failed", e);
+            const detail = e.response?.data?.detail;
+            const errorMsg = typeof detail === 'object' ? JSON.stringify(detail) : (detail || e.message);
+            alert(`Failed: ${errorMsg}`);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleAutoAssign = async () => {
+        if (!window.confirm("This will automatically assign all works >= 10L sanctioned on or before March 31, 2025 to their respective agency accounts. Continue?")) return;
+        
+        setLoading(true);
+        try {
+            const response = await api.post('/works/admin/auto-assign');
+            alert(response.data.message);
+            fetchWorks();
+        } catch (e) {
+            console.error("Auto-assign failed", e);
             const detail = e.response?.data?.detail;
             const errorMsg = typeof detail === 'object' ? JSON.stringify(detail) : (detail || e.message);
             alert(`Failed: ${errorMsg}`);
@@ -818,6 +836,19 @@ const AdminDashboard = () => {
                                                 <div className="text-left">
                                                     <p className="font-bold text-green-700">Sync Google Sheet</p>
                                                     <p className="text-[10px] text-green-600">Refresh master data</p>
+                                                </div>
+                                            </button>
+
+                                            <button
+                                                onClick={() => { handleAutoAssign(); setShowColumnMenu(false); }}
+                                                className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-orange-50/50 rounded-lg transition group"
+                                            >
+                                                <div className="bg-orange-50 p-1.5 rounded-md group-hover:bg-orange-100 transition">
+                                                    <Zap size={14} className="text-orange-600" />
+                                                </div>
+                                                <div className="text-left">
+                                                    <p className="font-bold text-orange-700">Auto-Assign All</p>
+                                                    <p className="text-[10px] text-orange-600">Pre-April 2025, {'>'}10L</p>
                                                 </div>
                                             </button>
 
