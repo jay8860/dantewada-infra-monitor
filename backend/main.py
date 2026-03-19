@@ -27,6 +27,17 @@ app.add_middleware(
     expose_headers=["X-Total-Count"]
 )
 
+@app.middleware("http")
+async def catch_exceptions_middleware(request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as e:
+        import traceback
+        with open("/tmp/backend_error.log", "a") as f:
+            f.write(f"\n\n--- ERROR AT {datetime.now()} ---\n")
+            f.write(traceback.format_exc())
+        raise e
+
 # Debug Endpoint - ALWAYS AVAILABLE
 @app.get("/api/debug")
 def debug_info():
@@ -38,6 +49,13 @@ def debug_info():
         "files": glob.glob("*"),
         "env_keys": list(os.environ.keys())
     }
+
+@app.get("/api/debug/errors")
+def get_errors():
+    if os.path.exists("/tmp/backend_error.log"):
+        with open("/tmp/backend_error.log", "r") as f:
+            return {"log": f.read()}
+    return {"message": "No error log found"}
 
 
 @app.get("/api/health")
