@@ -533,7 +533,7 @@ async def get_my_assignments(
 
     result = []
     for w in works:
-        photos = db.query(models.Photo).filter(models.Photo.work_id == w.id).all()
+        photos = db.query(models.WorkPhoto).filter(models.WorkPhoto.work_id == w.id).all()
         assigned_officer = db.query(models.User).filter(models.User.id == w.assigned_officer_id).first() if w.assigned_officer_id else None
         work_dict = {c.name: getattr(w, c.name) for c in w.__table__.columns}
         work_dict["photos"] = [{"id": p.id, "image_path": p.image_path, "thumbnail_path": p.thumbnail_path, "category": p.category, "caption": p.caption, "uploaded_at": str(p.uploaded_at) if p.uploaded_at else None, "uploaded_by": p.uploaded_by} for p in photos]
