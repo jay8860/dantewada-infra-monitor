@@ -295,45 +295,38 @@ const AdminDashboard = () => {
     };
 
     const handleBulkAssign = async () => {
-        if (selectedWorks.length === 0) {
-            alert("No works selected.");
-            return;
-        }
-        if (assignmentModal.officerIds.length === 0) {
-            alert("Please select one or more officers.");
-            return;
-        }
+        if (!bulkAssignModal || assignmentModal.officerIds.length === 0) return;
         setLoading(true);
         try {
-            await api.put('/works/bulk-assign', {
-                work_ids: allMatchingSelected ? [] : selectedWorks,
-                all_matching: allMatchingSelected,
+            const payload = {
                 officer_ids: assignmentModal.officerIds.map(id => parseInt(id)),
-                deadline_days: assignmentModal.days ? parseInt(assignmentModal.days) : null,
-                // Pass current filters for backend to re-calculate matching set
+                deadline_days: assignmentModal.days ? parseInt(assignmentModal.days) : 7,
+                all_matching: allMatchingSelected,
+                work_ids: allMatchingSelected ? [] : selectedWorks,
                 department: filters.department ? [filters.department] : null,
                 block: filters.block ? [filters.block] : null,
-                panchayat: filters.panchayat,
-                status: filters.status,
-                agency: filters.agency,
+                panchayat: filters.panchayat.length > 0 ? filters.panchayat : null,
+                status: filters.status.length > 0 ? filters.status : null,
+                agency: filters.agency.length > 0 ? filters.agency : null,
                 year: filters.year ? [filters.year] : null,
                 search: debouncedSearch,
                 start_date: dateRange.start,
                 end_date: dateRange.end,
                 min_amount: amountRange.min,
                 max_amount: amountRange.max
-            });
-            alert("Bulk assignment successful!");
-            setSelectedWorks([]);
+            };
+            
+            await api.put('/works/bulk-assign', payload);
+            alert('Bulk assignment successful!');
             setBulkAssignModal(false);
-            setAssignmentModal({ isOpen: false, workId: null, officerIds: [], days: '' });
+            setSelectedWorks([]);
+            setAllMatchingSelected(false);
             fetchWorks();
-        } catch (error) {
-            alert("Failed to assign works.");
-            console.error(error);
+        } catch (e) {
+            console.error("Bulk assignment failed", e);
+            alert(`Failed: ${e.response?.data?.detail || e.message}`);
         } finally {
             setLoading(false);
-        }
     };
 
 
@@ -565,6 +558,39 @@ const AdminDashboard = () => {
             fetchWorks();
         } catch (e) {
             console.error("Assignment failed", e);
+            alert(`Failed: ${e.response?.data?.detail || e.message}`);
+        }
+    };
+
+    const handleBulkUnassign = async () => {
+        if (selectedWorks.length === 0 && !allMatchingSelected) return;
+        if (!confirm(`Are you sure you want to UNASSIGN ${allMatchingSelected ? pagination.total : selectedWorks.length} works? This will clear all current inspectors and deadlines.`)) return;
+        
+        try {
+            const payload = {
+                officer_ids: [],
+                all_matching: allMatchingSelected,
+                work_ids: allMatchingSelected ? [] : selectedWorks,
+                department: filters.department ? [filters.department] : null,
+                block: filters.block ? [filters.block] : null,
+                panchayat: filters.panchayat.length > 0 ? filters.panchayat : null,
+                status: filters.status.length > 0 ? filters.status : null,
+                agency: filters.agency.length > 0 ? filters.agency : null,
+                year: filters.year ? [filters.year] : null,
+                search: debouncedSearch,
+                start_date: dateRange.start,
+                end_date: dateRange.end,
+                min_amount: amountRange.min,
+                max_amount: amountRange.max
+            };
+            
+            await api.put('/works/bulk-assign', payload);
+            alert('Unassignment successful!');
+            setSelectedWorks([]);
+            setAllMatchingSelected(false);
+            fetchWorks();
+        } catch (e) {
+            console.error("Bulk unassign failed", e);
             alert(`Failed: ${e.response?.data?.detail || e.message}`);
         }
     };
@@ -1522,6 +1548,40 @@ const AdminDashboard = () => {
                             </div>
                         </div>
                     )}
+
+                    {/* Floating Bulk Action Bar */}
+                    {isBulkMode && (selectedWorks.length > 0 || allMatchingSelected) && (
+                        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-white rounded-2xl shadow-2xl border px-6 py-4 flex items-center gap-6 z-[100] animate-in fade-in slide-in-from-bottom-8 duration-500">
+                            <div className="flex items-center gap-2">
+                                <div className="bg-indigo-600 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">
+                                    {allMatchingSelected ? pagination.total : selectedWorks.length}
+                                </div>
+                                <div className="text-sm font-medium text-gray-700">Works Selected</div>
+                            </div>
+                            <div className="h-8 w-px bg-gray-200"></div>
+                            <div className="flex gap-2">
+                                <button 
+                                    onClick={() => setBulkAssignModal(true)}
+                                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-md hover:shadow-lg active:scale-95"
+                                >
+                                    <Users size={16} /> Bulk Assign
+                                </button>
+                                <button 
+                                    onClick={handleBulkUnassign}
+                                    className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-xl text-sm font-bold transition-all border border-red-100"
+                                >
+                                    <UserX size={16} /> Unassign
+                                </button>
+                                <button 
+                                    onClick={() => { setSelectedWorks([]); setAllMatchingSelected(false); setIsBulkMode(false); }}
+                                    className="text-gray-400 hover:text-gray-600 p-2 transition"
+                                    title="Cancel"
+                                >
+                                    <RotateCcw size={18} />
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </main>
 
@@ -1597,7 +1657,7 @@ const AdminDashboard = () => {
                                     disabled={assignmentModal.officerIds.length === 0}
                                     className="px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg text-sm hover:bg-indigo-700 disabled:opacity-50"
                                 >
-                                    Assign All ({selectedWorks.length})
+                                    Assign All ({allMatchingSelected ? pagination.total : selectedWorks.length})
                                 </button>
                             </div>
                         </div>

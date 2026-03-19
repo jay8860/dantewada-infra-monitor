@@ -1111,8 +1111,9 @@ async def assign_work(
 from pydantic import BaseModel
 
 class AdminUpdate(BaseModel):
-    inspection_deadline: Optional[datetime] = None
+    inspection_deadline: Optional[str] = None
     admin_remarks: Optional[str] = None
+    user_remark: Optional[str] = None
 
 @router.put("/works/{work_id}/admin")
 async def update_work_admin(
@@ -1132,6 +1133,8 @@ async def update_work_admin(
         work.inspection_deadline = update.inspection_deadline
     if update.admin_remarks is not None:
         work.admin_remarks = update.admin_remarks
+    if update.user_remark is not None:
+        work.user_remark = update.user_remark
         
     db.commit()
     return {"message": "Updated"}
@@ -1209,29 +1212,32 @@ async def bulk_assign_works(
     
     # 1. Update Work table (Legacy/Primary reference)
     for w in works:
-        w.assignment_status = "Assigned"
-        if deadline:
-            w.inspection_deadline = deadline
-        if req.officer_ids:
+        if not req.officer_ids:
+            w.assignment_status = "Not Started"
+            w.assigned_officer_id = None
+        else:
+            w.assignment_status = "Assigned"
+            if deadline:
+                w.inspection_deadline = deadline
             w.assigned_officer_id = req.officer_ids[0]
 
     # 2. Update WorkAssignment table (Actual Multi-Assignment)
-    # Clear existing assignments for these works if needed? 
-    # Usually better to overwrite or add. Let's append new ones, or refresh.
-    # User said "assign bulk assign in all works", usually means reset to these officers.
+    # Clear existing assignments for these works
     db.query(models.WorkAssignment).filter(models.WorkAssignment.work_id.in_(work_ids)).delete(synchronize_session=False)
 
-    for w_id in work_ids:
-        for o_id in req.officer_ids:
-            new_assign = models.WorkAssignment(
-                work_id=w_id,
-                user_id=o_id,
-                deadline=deadline
-            )
-            db.add(new_assign)
+    if req.officer_ids:
+        for w_id in work_ids:
+            for o_id in req.officer_ids:
+                new_assign = models.WorkAssignment(
+                    work_id=w_id,
+                    user_id=o_id,
+                    deadline=deadline
+                )
+                db.add(new_assign)
             
     db.commit()
-    return {"message": f"Successfully assigned {len(works)} works to {len(req.officer_ids)} officers"}
+    msg = f"Successfully assigned {len(works)} works to {len(req.officer_ids)} officers" if req.officer_ids else f"Successfully unassigned {len(works)} works"
+    return {"message": msg}
 
 # =============================================
 # WORK PHOTOS - Upload, List, Delete
@@ -1319,6 +1325,43 @@ async def get_work_photos(
         }
         for p in photos
     ]
+
+
+class PhotoUpdate(BaseModel):
+    caption: Optional[str] = None
+    category: Optional[str] = None
+
+@router.patch("/works/{work_id}/photos/{photo_id}")
+async def update_work_photo(
+    work_id: int,
+    photo_id: int,
+    update: PhotoUpdate,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update photo caption or category. Admin only."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can edit photo metadata")
+    
+    photo = db.query(models.WorkPhoto).filter(
+        models.WorkPhoto.id == photo_id,
+        models.WorkPhoto.work_id == work_id
+    ).first()
+    
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    
+    if update.caption is not None:
+        photo.caption = update.caption
+    if update.category is not None:
+        photo.category = update.category
+        
+    db.commit()
+    return {"message": "Photo updated", "photo": {
+        "id": photo.id,
+        "caption": photo.caption,
+        "category": photo.category
+    }}
 
 
 class DeleteRequest(BaseModel):

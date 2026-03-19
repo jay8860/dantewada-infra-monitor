@@ -22,6 +22,9 @@ const WorkDetailDrawer = ({ work, isOpen, onClose, hideUpload = false }) => {
     const [lightboxOpen, setLightboxOpen] = useState(false);
     const [lightboxIndex, setLightboxIndex] = useState(0);
     const [uploadModalOpen, setUploadModalOpen] = useState(false);
+    const [editingPhoto, setEditingPhoto] = useState(null);
+    const [isEditingUserRemark, setIsEditingUserRemark] = useState(false);
+    const [tempUserRemark, setTempUserRemark] = useState('');
 
     useEffect(() => {
         if (work && isOpen) {
@@ -113,6 +116,28 @@ const WorkDetailDrawer = ({ work, isOpen, onClose, hideUpload = false }) => {
         } catch (err) {
             console.error("Failed to delete inspection", err);
             alert(err.response?.data?.detail || "Deletion failed");
+        }
+    };
+
+    const handleSaveUserRemark = async () => {
+        try {
+            await api.put(`/works/${work.id}/admin`, { user_remark: tempUserRemark });
+            setFullWork(prev => ({ ...prev, user_remark: tempUserRemark, remark: tempUserRemark }));
+            setIsEditingUserRemark(false);
+        } catch (err) {
+            console.error("Failed to save user remark", err);
+            alert("Failed to save remark.");
+        }
+    };
+
+    const handleUpdatePhoto = async (photoId, updates) => {
+        try {
+            await api.patch(`/works/${work.id}/photos/${photoId}`, updates);
+            setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, ...updates } : p));
+            setEditingPhoto(null);
+        } catch (err) {
+            console.error("Failed to update photo", err);
+            alert("Failed to update photo.");
         }
     };
 
@@ -245,14 +270,24 @@ const WorkDetailDrawer = ({ work, isOpen, onClose, hideUpload = false }) => {
                                                 {photo.category}
                                             </span>
                                         </div>
-                                        {/* Delete button (admin only) */}
+                                        {/* Delete & Edit buttons (admin only) */}
                                         {isAdmin && (
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); handleDeletePhoto(photo.id); }}
-                                                className="absolute top-1 right-1 bg-red-500/80 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                                            >
-                                                <Trash2 size={10} />
-                                            </button>
+                                            <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setEditingPhoto(photo); }}
+                                                    className="bg-blue-500 text-white p-1 rounded-full hover:bg-blue-600 transition"
+                                                    title="Edit Photo Info"
+                                                >
+                                                    <Camera size={10} />
+                                                </button>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleDeletePhoto(photo.id); }}
+                                                    className="bg-red-500 text-white p-1 rounded-full hover:bg-red-600 transition"
+                                                    title="Delete Photo"
+                                                >
+                                                    <Trash2 size={10} />
+                                                </button>
+                                            </div>
                                         )}
                                         {/* Date */}
                                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1">
@@ -399,9 +434,46 @@ const WorkDetailDrawer = ({ work, isOpen, onClose, hideUpload = false }) => {
                                         {displayWork.current_status}
                                     </span>
                                 </div>
-                                <div className="flex justify-between items-start">
-                                    <span className="text-sm text-gray-500 whitespace-nowrap mr-4">Remark</span>
-                                    <span className="text-sm text-gray-700 text-right italic">{displayWork.remark || 'No remarks'}</span>
+                                <div className="flex flex-col gap-1 w-full">
+                                    <div className="flex justify-between items-start">
+                                        <span className="text-sm text-gray-500 whitespace-nowrap mr-4">User Remark</span>
+                                        {isAdmin && !isEditingUserRemark && (
+                                            <button 
+                                                onClick={() => { setIsEditingUserRemark(true); setTempUserRemark(displayWork.user_remark || displayWork.remark || ''); }}
+                                                className="text-blue-600 hover:text-blue-800 text-[10px] font-bold uppercase tracking-wide"
+                                            >
+                                                Edit
+                                            </button>
+                                        )}
+                                    </div>
+                                    {isEditingUserRemark ? (
+                                        <div className="mt-1">
+                                            <textarea
+                                                className="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                                rows="2"
+                                                value={tempUserRemark}
+                                                onChange={(e) => setTempUserRemark(e.target.value)}
+                                            />
+                                            <div className="flex justify-end gap-2 mt-2">
+                                                <button 
+                                                    onClick={() => setIsEditingUserRemark(false)}
+                                                    className="px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button 
+                                                    onClick={handleSaveUserRemark}
+                                                    className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                                                >
+                                                    Save
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <span className="text-sm text-gray-700 text-right italic leading-relaxed">
+                                            {displayWork.user_remark || displayWork.remark || 'No remarks'}
+                                        </span>
+                                    )}
                                 </div>
                                 {displayWork.inspection_date && (
                                     <div className="flex justify-between items-center mt-2 pt-2 border-t border-dashed">
@@ -432,6 +504,58 @@ const WorkDetailDrawer = ({ work, isOpen, onClose, hideUpload = false }) => {
                 onClose={() => setUploadModalOpen(false)}
                 onUploadComplete={handleUploadComplete}
             />
+            {/* Edit Photo Modal */}
+            {editingPhoto && (
+                <div className="fixed inset-0 z-[2000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
+                            <h3 className="font-bold text-gray-800">Edit Photo Details</h3>
+                            <button onClick={() => setEditingPhoto(null)} className="text-gray-400 hover:text-gray-600">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Category</label>
+                                <div className="flex flex-wrap gap-2">
+                                    {PHOTO_CATEGORIES.filter(c => c !== 'All').map(cat => (
+                                        <button
+                                            key={cat}
+                                            onClick={() => setEditingPhoto(prev => ({ ...prev, category: cat }))}
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                                editingPhoto.category === cat
+                                                    ? 'bg-blue-600 text-white border-blue-600 shadow-md scale-105'
+                                                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            {cat}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Caption</label>
+                                <textarea
+                                    className="w-full border rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                    rows="3"
+                                    placeholder="Enter image description..."
+                                    value={editingPhoto.caption || ''}
+                                    onChange={(e) => setEditingPhoto(prev => ({ ...prev, caption: e.target.value }))}
+                                />
+                            </div>
+                            <button
+                                onClick={() => handleUpdatePhoto(editingPhoto.id, {
+                                    caption: editingPhoto.caption,
+                                    category: editingPhoto.category
+                                })}
+                                className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold shadow-lg hover:from-blue-700 hover:to-indigo-700 transition-all active:scale-95"
+                            >
+                                Update Photo Information
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 };
