@@ -96,13 +96,16 @@ const AdminDashboard = () => {
         block: '',
         panchayat: [], // Changed to array for MultiSelect
         department: '',
-        status: ['In Progress', 'Not Started', 'Stalled'], // Exclude 'Completed' by default
+        status: [], // Initialized as empty, will be set dynamically in fetchGlobalData
         agency: [], // Changed to array for MultiSelect
         year: ''
     });
     const [amountRange, setAmountRange] = useState({ min: '', max: '' }); // NEW: Amount Range Filter
     const debouncedAmountRange = useDebounce(amountRange, 800); // 800ms delay for number typing
-    const [dateRange, setDateRange] = useState({ start: '', end: '' });
+    const [dateRange, setDateRange] = useState({ 
+        start: '', 
+        end: new Date().toISOString().split('T')[0] 
+    });
 
     // --- Fetch TABLE Works (Paginated) ---
     const fetchWorks = useCallback(async () => {
@@ -233,6 +236,14 @@ const AdminDashboard = () => {
                 ]);
                 setGlobalStats(statsRes.data);
                 setFilterOptions(filtersRes.data);
+
+                // Set default status to all except 'Completed'
+                if (filtersRes.data.statuses) {
+                    const defaultStatuses = filtersRes.data.statuses.filter(s => 
+                        s.toLowerCase() !== 'completed'
+                    );
+                    setFilters(prev => ({ ...prev, status: defaultStatuses }));
+                }
                 
             } catch (error) {
                 console.error("Failed to fetch global data", error);
@@ -402,16 +413,19 @@ const AdminDashboard = () => {
     };
 
     const resetFilters = () => {
+        const today = new Date().toISOString().split('T')[0];
+        const defaultStatuses = filterOptions.statuses ? filterOptions.statuses.filter(s => s.toLowerCase() !== 'completed') : [];
+        
         setFilters({
             block: '',
             panchayat: [],
             department: '',
-            status: [],
+            status: defaultStatuses,
             agency: [],
             year: ''
         });
         setAmountRange({ min: '', max: '' });
-        setDateRange({ start: '', end: '' });
+        setDateRange({ start: '', end: today });
         setSearchTerm('');
     };
 
@@ -1309,7 +1323,7 @@ const AdminDashboard = () => {
                                                             <input 
                                                                 type="checkbox" 
                                                                 className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                                                checked={selectedWorks.includes(work.id)}
+                                                                checked={allMatchingSelected || selectedWorks.includes(work.id)}
                                                                 onChange={() => toggleSelectWork(work.id)}
                                                             />
                                                         </td>
