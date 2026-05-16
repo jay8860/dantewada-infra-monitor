@@ -9,6 +9,7 @@ import MultiSelect from '../components/MultiSelect';
 import VillageSummaryTable from '../components/VillageSummaryTable';
 import UserManagementModal from '../components/UserManagementModal';
 import PhotoLightbox from '../components/PhotoLightbox';
+import { buildMediaUrl } from '../utils/media';
 
 // Debounce helper
 const useDebounce = (value, delay) => {
@@ -1453,7 +1454,7 @@ const AdminDashboard = () => {
                                                                     }}
                                                                 >
                                                                     <img
-                                                                        src={`${import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:8000'}/${work.photos[0].thumbnail_path}`}
+                                                                        src={buildMediaUrl(work.photos[0].thumbnail_path)}
                                                                         alt="Work photo"
                                                                         className="w-12 h-12 rounded-lg object-cover border border-gray-200 shadow-sm group-hover:scale-105 transition-transform"
                                                                     />

@@ -6,6 +6,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
 from reportlab.lib.units import inch
 from PIL import Image
+import image_utils
 
 def build_visual_pdf(works_data):
     """
@@ -58,10 +59,11 @@ def build_visual_pdf(works_data):
             
             for p in recent_photos:
                 img_path = p.get('thumbnail_path') or p.get('image_path')
-                if img_path and os.path.exists(img_path):
+                resolved_img_path = image_utils.resolve_upload_path(img_path)
+                if resolved_img_path and os.path.exists(resolved_img_path):
                     try:
                         # Add image to row
-                        img = RLImage(img_path, width=2.5*inch, height=1.8*inch)
+                        img = RLImage(resolved_img_path, width=2.5*inch, height=1.8*inch)
                         img_row.append(img)
                         # Build caption
                         cat = p.get('category', 'Unknown')

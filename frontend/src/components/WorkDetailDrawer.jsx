@@ -4,8 +4,7 @@ import api from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import PhotoLightbox from './PhotoLightbox';
 import PhotoUploadModal from './PhotoUploadModal';
-
-const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace('/api', '');
+import { buildMediaUrl } from '../utils/media';
 
 const PHOTO_CATEGORIES = ['All', 'Before', 'During', 'After', 'Completed'];
 
@@ -259,7 +258,7 @@ const WorkDetailDrawer = ({ work, isOpen, onClose, hideUpload = false }) => {
                                         onClick={() => handlePhotoClick(idx)}
                                     >
                                         <img
-                                            src={`${API_BASE}/${photo.thumbnail_path}`}
+                                            src={buildMediaUrl(photo.thumbnail_path)}
                                             alt={photo.caption || `Photo ${idx + 1}`}
                                             className="w-full h-24 object-cover transition-transform group-hover:scale-105"
                                             loading="lazy"
@@ -358,7 +357,7 @@ const WorkDetailDrawer = ({ work, isOpen, onClose, hideUpload = false }) => {
                                                 {event.photos.map((photo, pIdx) => (
                                                     <img
                                                         key={pIdx}
-                                                        src={`${API_BASE}/${photo.url}`}
+                                                        src={buildMediaUrl(photo.url)}
                                                         alt="Inspection"
                                                         className="w-20 h-20 object-cover rounded border hover:scale-105 transition-transform"
                                                     />

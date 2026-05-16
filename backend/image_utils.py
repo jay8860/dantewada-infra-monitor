@@ -9,9 +9,11 @@ from datetime import datetime
 from PIL import Image, ExifTags
 import io
 
-UPLOAD_DIR = "uploads"
+DATA_DIR = os.environ.get("DATA_DIR", ".")
+UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
 FULL_DIR = os.path.join(UPLOAD_DIR, "photos")
 THUMB_DIR = os.path.join(UPLOAD_DIR, "thumbnails")
+PUBLIC_UPLOAD_DIR = "uploads"
 
 # Compression settings
 MAX_WIDTH = 1920       # Max pixel width for full-size
@@ -23,6 +25,38 @@ def ensure_dirs():
     """Create upload directories if they don't exist."""
     os.makedirs(FULL_DIR, exist_ok=True)
     os.makedirs(THUMB_DIR, exist_ok=True)
+
+
+def to_public_path(path: str) -> str:
+    """Return the browser-facing path served by the /uploads mount."""
+    if not path:
+        return path
+
+    normalized = str(path).replace("\\", "/")
+    upload_marker = f"/{PUBLIC_UPLOAD_DIR}/"
+
+    if normalized.startswith(f"{PUBLIC_UPLOAD_DIR}/"):
+        return normalized
+    if upload_marker in normalized:
+        return f"{PUBLIC_UPLOAD_DIR}/{normalized.split(upload_marker, 1)[1]}"
+
+    return normalized.lstrip("/")
+
+
+def resolve_upload_path(path: str) -> str:
+    """Resolve a stored public upload path to the file on disk."""
+    if not path:
+        return path
+
+    normalized = str(path).replace("\\", "/")
+    if os.path.isabs(path):
+        return path
+
+    if normalized.startswith(f"{PUBLIC_UPLOAD_DIR}/"):
+        relative = normalized[len(PUBLIC_UPLOAD_DIR) + 1:]
+        return os.path.join(UPLOAD_DIR, *relative.split("/"))
+
+    return path
 
 
 def fix_orientation(img: Image.Image) -> Image.Image:
@@ -73,8 +107,8 @@ def process_upload(file_bytes: bytes, original_filename: str) -> tuple[str, str]
     full_filename = f"{base_name}.{ext}"
     thumb_filename = f"{base_name}_thumb.{ext}"
     
-    full_path = os.path.join(FULL_DIR, full_filename)
-    thumb_path = os.path.join(THUMB_DIR, thumb_filename)
+    full_storage_path = os.path.join(FULL_DIR, full_filename)
+    thumb_storage_path = os.path.join(THUMB_DIR, thumb_filename)
     
     # Open and process
     img = Image.open(io.BytesIO(file_bytes))
@@ -102,20 +136,24 @@ def process_upload(file_bytes: bytes, original_filename: str) -> tuple[str, str]
         img_full = img.copy()
     
     # Save full-size
-    img_full.save(full_path, "JPEG", quality=JPEG_QUALITY, optimize=True)
+    img_full.save(full_storage_path, "JPEG", quality=JPEG_QUALITY, optimize=True)
     
     # Generate thumbnail
     ratio = THUMB_WIDTH / img.size[0]
     thumb_h = int(img.size[1] * ratio)
     img_thumb = img.resize((THUMB_WIDTH, thumb_h), Image.LANCZOS)
-    img_thumb.save(thumb_path, "JPEG", quality=80, optimize=True)
+    img_thumb.save(thumb_storage_path, "JPEG", quality=80, optimize=True)
     
     # Return relative paths (for serving via static mount)
-    return full_path, thumb_path
+    return (
+        f"{PUBLIC_UPLOAD_DIR}/photos/{full_filename}",
+        f"{PUBLIC_UPLOAD_DIR}/thumbnails/{thumb_filename}",
+    )
 
 
 def get_file_size_kb(path: str) -> float:
     """Get file size in KB."""
-    if os.path.exists(path):
-        return os.path.getsize(path) / 1024
+    resolved_path = resolve_upload_path(path)
+    if resolved_path and os.path.exists(resolved_path):
+        return os.path.getsize(resolved_path) / 1024
     return 0

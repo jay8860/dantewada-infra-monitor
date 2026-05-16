@@ -1,7 +1,6 @@
 import React, { useEffect, useCallback } from 'react';
 import { X, ChevronLeft, ChevronRight, Download, User, Calendar } from 'lucide-react';
-
-const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace('/api', '');
+import { buildMediaUrl } from '../utils/media';
 
 /**
  * Full-screen lightbox for viewing photos at full resolution.
@@ -35,7 +34,7 @@ const PhotoLightbox = ({ photos, currentIndex, isOpen, onClose, onNavigate }) =>
     const photo = photos[currentIndex];
     if (!photo) return null;
 
-    const imageUrl = `${API_BASE}/${photo.image_path}`;
+    const imageUrl = buildMediaUrl(photo.image_path);
 
     return (
         <div

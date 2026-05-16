@@ -17,6 +17,19 @@ import pdf_generator
 
 router = APIRouter()
 
+
+def serialize_work_photo(photo):
+    return {
+        "id": photo.id,
+        "image_path": image_utils.to_public_path(photo.image_path),
+        "thumbnail_path": image_utils.to_public_path(photo.thumbnail_path),
+        "caption": photo.caption,
+        "category": photo.category,
+        "uploaded_by": photo.uploaded_by,
+        "uploaded_at": photo.uploaded_at.isoformat() if photo.uploaded_at else None
+    }
+
+
 # --- Auth ---
 @router.post("/token")
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -536,7 +549,7 @@ async def get_my_assignments(
         photos = db.query(models.WorkPhoto).filter(models.WorkPhoto.work_id == w.id).all()
         assigned_officer = db.query(models.User).filter(models.User.id == w.assigned_officer_id).first() if w.assigned_officer_id else None
         work_dict = {c.name: getattr(w, c.name) for c in w.__table__.columns}
-        work_dict["photos"] = [{"id": p.id, "image_path": p.image_path, "thumbnail_path": p.thumbnail_path, "category": p.category, "caption": p.caption, "uploaded_at": str(p.uploaded_at) if p.uploaded_at else None, "uploaded_by": p.uploaded_by} for p in photos]
+        work_dict["photos"] = [serialize_work_photo(p) for p in photos]
         work_dict["assigned_officer"] = {"id": assigned_officer.id, "username": assigned_officer.username} if assigned_officer else None
         result.append(work_dict)
 
@@ -606,15 +619,7 @@ async def get_works(
         for p in photos:
             if p.work_id not in work_photos_map:
                 work_photos_map[p.work_id] = []
-            work_photos_map[p.work_id].append({
-                "id": p.id,
-                "image_path": p.image_path,
-                "thumbnail_path": p.thumbnail_path,
-                "caption": p.caption,
-                "category": p.category,
-                "uploaded_by": p.uploaded_by,
-                "uploaded_at": p.uploaded_at.isoformat() if p.uploaded_at else None
-            })
+            work_photos_map[p.work_id].append(serialize_work_photo(p))
             
         subq_insp = db.query(
             models.Inspection.work_id,
@@ -831,12 +836,7 @@ async def export_works_pdf(
             for p in photos:
                 if p.work_id not in work_photos_map:
                     work_photos_map[p.work_id] = []
-                work_photos_map[p.work_id].append({
-                    "image_path": p.image_path,
-                    "thumbnail_path": p.thumbnail_path,
-                    "category": p.category,
-                    "uploaded_at": p.uploaded_at.isoformat() if p.uploaded_at else None
-                })
+                work_photos_map[p.work_id].append(serialize_work_photo(p))
                 
         # 3. Build dictionary format matching pdf_generator expectations
         result = []
@@ -1016,6 +1016,11 @@ async def create_inspection(
                 uploaded_by=current_user.username
             )
             db.add(new_photo)
+
+            db.add(models.InspectionPhoto(
+                inspection_id=new_inspection.id,
+                image_path=full_path
+            ))
             
         # Update Work's latitude/longitude to reflect latest inspection location (useful for tracking)
         # BUT DO NOT update current_status automatically. Admin must approve.
@@ -1047,14 +1052,28 @@ async def get_work_timeline(
         raise HTTPException(status_code=404, detail="Work not found")
         
     timeline = []
+    work_photos = db.query(models.WorkPhoto).filter(
+        models.WorkPhoto.work_id == work_id
+    ).order_by(models.WorkPhoto.uploaded_at.desc()).all()
+
     for insp in work.inspections:
+        photos = [{"url": image_utils.to_public_path(p.image_path)} for p in insp.photos]
+        if not photos and insp.inspection_date:
+            start = insp.inspection_date - timedelta(minutes=10)
+            end = insp.inspection_date + timedelta(minutes=10)
+            photos = [
+                {"url": image_utils.to_public_path(p.image_path)}
+                for p in work_photos
+                if p.uploaded_at and start <= p.uploaded_at <= end
+            ]
+
         timeline.append({
             "id": insp.id,
             "date": insp.inspection_date,
             "inspector": insp.inspector_name,
             "status": insp.status_at_time,
             "remarks": insp.remarks,
-            "photos": [{"url": p.image_path} for p in insp.photos]
+            "photos": photos
         })
     return timeline
 
@@ -1377,18 +1396,7 @@ async def get_work_photos(
     photos = query.order_by(models.WorkPhoto.uploaded_at.desc()).all()
     
     # Build base URL for serving
-    return [
-        {
-            "id": p.id,
-            "image_path": p.image_path,
-            "thumbnail_path": p.thumbnail_path,
-            "caption": p.caption,
-            "category": p.category,
-            "uploaded_by": p.uploaded_by,
-            "uploaded_at": p.uploaded_at.isoformat() if p.uploaded_at else None
-        }
-        for p in photos
-    ]
+    return [serialize_work_photo(p) for p in photos]
 
 
 class PhotoUpdate(BaseModel):
@@ -1457,9 +1465,10 @@ async def delete_work_photo(
     
     # Delete files from disk
     for path in [photo.image_path, photo.thumbnail_path]:
-        if path and os.path.exists(path):
+        resolved_path = image_utils.resolve_upload_path(path)
+        if resolved_path and os.path.exists(resolved_path):
             try:
-                os.remove(path)
+                os.remove(resolved_path)
             except OSError:
                 pass
     
@@ -1634,4 +1643,3 @@ async def delete_user(
     user.is_active = False
     db.commit()
     return {"message": f"User '{user.username}' deactivated"}
-

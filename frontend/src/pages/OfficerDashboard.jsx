@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { MapPin, RefreshCw, LogOut, Search, Clock, AlertTriangle, CheckCircle, Calendar, ChevronLeft, ChevronRight, Camera, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import WorkDetailDrawer from '../components/WorkDetailDrawer';
+import { buildMediaUrl } from '../utils/media';
 
 const OfficerDashboard = () => {
     const { user, logout } = useAuth();
@@ -311,7 +312,7 @@ const OfficerDashboard = () => {
                             <div className="w-16 h-16 rounded-lg bg-gray-100 border overflow-hidden shrink-0">
                                 {selectedWork.photos && selectedWork.photos.length > 0 ? (
                                     <img 
-                                        src={`http://localhost:8000/${selectedWork.photos[0].thumbnail_path}`} 
+                                        src={buildMediaUrl(selectedWork.photos[0].thumbnail_path)}
                                         className="w-full h-full object-cover"
                                         alt="Last status"
                                     />
