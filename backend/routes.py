@@ -1056,7 +1056,11 @@ async def get_work_timeline(
         models.WorkPhoto.work_id == work_id
     ).order_by(models.WorkPhoto.uploaded_at.desc()).all()
 
-    for insp in work.inspections:
+    inspections = db.query(models.Inspection).filter(
+        models.Inspection.work_id == work_id
+    ).order_by(models.Inspection.inspection_date.desc(), models.Inspection.id.desc()).all()
+
+    for insp in inspections:
         photos = [{"url": image_utils.to_public_path(p.image_path)} for p in insp.photos]
         if not photos and insp.inspection_date:
             start = insp.inspection_date - timedelta(minutes=10)
@@ -1071,8 +1075,11 @@ async def get_work_timeline(
             "id": insp.id,
             "date": insp.inspection_date,
             "inspector": insp.inspector_name,
+            "designation": insp.inspector_designation,
             "status": insp.status_at_time,
             "remarks": insp.remarks,
+            "latitude": insp.latitude,
+            "longitude": insp.longitude,
             "photos": photos
         })
     return timeline
@@ -1439,6 +1446,57 @@ async def update_work_photo(
 class DeleteRequest(BaseModel):
     admin_password: str
 
+
+@router.delete("/admin/photos")
+async def delete_all_photos(
+    req: DeleteRequest,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete only photo files and photo records. Work and inspection details stay intact."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can delete photos")
+
+    if not auth.verify_password(req.admin_password, current_user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid admin password")
+
+    work_photos = db.query(models.WorkPhoto).all()
+    inspection_photos = db.query(models.InspectionPhoto).all()
+
+    file_paths = set()
+    for photo in work_photos:
+        if photo.image_path:
+            file_paths.add(photo.image_path)
+        if photo.thumbnail_path:
+            file_paths.add(photo.thumbnail_path)
+    for photo in inspection_photos:
+        if photo.image_path:
+            file_paths.add(photo.image_path)
+
+    deleted_files = 0
+    for path in file_paths:
+        resolved_path = image_utils.resolve_upload_path(path)
+        if resolved_path and os.path.exists(resolved_path):
+            try:
+                os.remove(resolved_path)
+                deleted_files += 1
+            except OSError:
+                pass
+
+    work_photo_count = len(work_photos)
+    inspection_photo_count = len(inspection_photos)
+
+    db.query(models.WorkPhoto).delete(synchronize_session=False)
+    db.query(models.InspectionPhoto).delete(synchronize_session=False)
+    db.commit()
+
+    return {
+        "message": "All photos deleted. Work and inspection data were not changed.",
+        "work_photos_deleted": work_photo_count,
+        "inspection_photos_deleted": inspection_photo_count,
+        "files_deleted": deleted_files
+    }
+
 @router.delete("/works/{work_id}/photos/{photo_id}")
 async def delete_work_photo(
     work_id: int,
@@ -1463,6 +1521,10 @@ async def delete_work_photo(
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
     
+    db.query(models.InspectionPhoto).filter(
+        models.InspectionPhoto.image_path == photo.image_path
+    ).delete(synchronize_session=False)
+
     # Delete files from disk
     for path in [photo.image_path, photo.thumbnail_path]:
         resolved_path = image_utils.resolve_upload_path(path)

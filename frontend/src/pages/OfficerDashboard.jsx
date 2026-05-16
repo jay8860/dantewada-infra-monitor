@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { MapPin, RefreshCw, LogOut, Search, Clock, AlertTriangle, CheckCircle, Calendar, ChevronLeft, ChevronRight, Camera, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import WorkDetailDrawer from '../components/WorkDetailDrawer';
+import PhotoLightbox from '../components/PhotoLightbox';
 import { buildMediaUrl } from '../utils/media';
 
 const OfficerDashboard = () => {
@@ -21,6 +22,9 @@ const OfficerDashboard = () => {
     const [selectedWork, setSelectedWork] = useState(null); // For Inspection Form
     const [isDrawerOpen, setIsDrawerOpen] = useState(false); // NEW: Historical Context
     const [searchTerm, setSearchTerm] = useState('');
+    const [inspectionHistory, setInspectionHistory] = useState([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
+    const [historyLightbox, setHistoryLightbox] = useState({ isOpen: false, index: 0, photos: [] });
 
     // Pagination & Sorting
     const [currentPage, setCurrentPage] = useState(1);
@@ -51,6 +55,15 @@ const OfficerDashboard = () => {
         setCurrentPage(1);
     }, [activeTab, searchTerm]);
 
+    useEffect(() => {
+        if (selectedWork?.id) {
+            fetchInspectionHistory(selectedWork.id);
+        } else {
+            setInspectionHistory([]);
+            setHistoryLightbox({ isOpen: false, index: 0, photos: [] });
+        }
+    }, [selectedWork?.id]);
+
     const fetchWorks = async () => {
         setLoading(true);
         try {
@@ -77,6 +90,19 @@ const OfficerDashboard = () => {
     const checkPending = async () => {
         const pending = await getPendingUpdates();
         setPendingCount(pending.length);
+    };
+
+    const fetchInspectionHistory = async (workId) => {
+        setLoadingHistory(true);
+        try {
+            const res = await api.get(`/works/${workId}/timeline`);
+            setInspectionHistory(res.data || []);
+        } catch (error) {
+            console.error("Failed to fetch inspection history", error);
+            setInspectionHistory([]);
+        } finally {
+            setLoadingHistory(false);
+        }
     };
 
     // --- Helpers ---
@@ -134,6 +160,30 @@ const OfficerDashboard = () => {
     };
 
     const { currentItems, totalPages, totalCount } = getPaginatedData();
+
+    const openHistoryPhoto = (eventIndex, photoIndex) => {
+        const allPhotos = [];
+        let targetIndex = 0;
+
+        inspectionHistory.forEach((event, eIdx) => {
+            (event.photos || []).forEach((p, pIdx) => {
+                if (eIdx === eventIndex && pIdx === photoIndex) {
+                    targetIndex = allPhotos.length;
+                }
+                allPhotos.push({
+                    image_path: p.url,
+                    caption: event.remarks || `Inspection on ${event.date ? new Date(event.date).toLocaleDateString('en-IN') : ''}`,
+                    category: event.status,
+                    uploaded_by: event.inspector,
+                    uploaded_at: event.date
+                });
+            });
+        });
+
+        if (allPhotos.length > 0) {
+            setHistoryLightbox({ isOpen: true, index: targetIndex, photos: allPhotos });
+        }
+    };
 
     // --- Form Logic ---
     const getLocation = () => {
@@ -339,6 +389,85 @@ const OfficerDashboard = () => {
                         </div>
                     </div>
 
+                    <div className="bg-white p-5 rounded-xl shadow-sm mb-6 border border-gray-100">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-sm font-bold text-gray-800 uppercase flex items-center gap-2">
+                                <Clock size={16} /> Past Inspections
+                            </h3>
+                            {inspectionHistory.length > 0 && (
+                                <span className="text-xs font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded-full">
+                                    {inspectionHistory.length}
+                                </span>
+                            )}
+                        </div>
+
+                        {loadingHistory ? (
+                            <div className="py-4 text-sm text-gray-400">Loading previous updates...</div>
+                        ) : inspectionHistory.length === 0 ? (
+                            <div className="p-4 bg-gray-50 border border-dashed border-gray-200 rounded-lg text-sm text-gray-500 text-center">
+                                No past inspections recorded yet.
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {inspectionHistory.map((event, eventIndex) => (
+                                    <div key={event.id} className="border border-gray-100 rounded-xl p-4 bg-gray-50/60">
+                                        <div className="flex justify-between gap-3">
+                                            <div>
+                                                <p className="text-sm font-bold text-gray-800">
+                                                    {event.date ? new Date(event.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Inspection'}
+                                                </p>
+                                                {event.date && (
+                                                    <p className="text-[11px] text-gray-400">
+                                                        {new Date(event.date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <span className={`shrink-0 h-fit px-2 py-1 rounded-full text-[10px] font-bold ${event.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                                {event.status || 'Updated'}
+                                            </span>
+                                        </div>
+
+                                        <div className="mt-3 grid grid-cols-1 gap-1 text-xs text-gray-600">
+                                            <p><span className="font-semibold text-gray-700">Inspector:</span> {event.inspector || '-'}</p>
+                                            {event.designation && <p><span className="font-semibold text-gray-700">Designation:</span> {event.designation}</p>}
+                                            {event.latitude && event.longitude && (
+                                                <p><span className="font-semibold text-gray-700">GPS:</span> {Number(event.latitude).toFixed(5)}, {Number(event.longitude).toFixed(5)}</p>
+                                            )}
+                                        </div>
+
+                                        {event.remarks && (
+                                            <p className="mt-3 text-sm text-gray-700 bg-white border border-gray-100 rounded-lg p-3 leading-relaxed">
+                                                {event.remarks}
+                                            </p>
+                                        )}
+
+                                        {event.photos && event.photos.length > 0 ? (
+                                            <div className="mt-3 grid grid-cols-4 gap-2">
+                                                {event.photos.map((photoItem, photoIndex) => (
+                                                    <button
+                                                        key={`${event.id}-${photoIndex}`}
+                                                        type="button"
+                                                        onClick={() => openHistoryPhoto(eventIndex, photoIndex)}
+                                                        className="aspect-square rounded-lg overflow-hidden border border-gray-200 bg-white hover:border-blue-400 transition"
+                                                    >
+                                                        <img
+                                                            src={buildMediaUrl(photoItem.url)}
+                                                            alt="Past inspection"
+                                                            className="w-full h-full object-cover"
+                                                            loading="lazy"
+                                                        />
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="mt-3 text-xs text-gray-400 italic">No photo attached to this inspection.</p>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
                     <form onSubmit={handleSubmit} className="space-y-5 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                         <div className="grid grid-cols-2 gap-4">
                             <div>
@@ -481,6 +610,13 @@ const OfficerDashboard = () => {
                     onClose={() => setIsDrawerOpen(false)} 
                     work={selectedWork} 
                     hideUpload={true}
+                />
+                <PhotoLightbox
+                    photos={historyLightbox.photos}
+                    currentIndex={historyLightbox.index}
+                    isOpen={historyLightbox.isOpen}
+                    onClose={() => setHistoryLightbox(prev => ({ ...prev, isOpen: false }))}
+                    onNavigate={(idx) => setHistoryLightbox(prev => ({ ...prev, index: idx }))}
                 />
             </div>
         );
