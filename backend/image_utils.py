@@ -29,18 +29,30 @@ def ensure_dirs():
     os.makedirs(THUMB_DIR, exist_ok=True)
 
 
+def get_upload_relative_path(path: str) -> str:
+    """Extract the path below any uploads directory segment."""
+    if not path:
+        return ""
+
+    normalized = str(path).replace("\\", "/").strip()
+    parts = [part for part in normalized.split("/") if part]
+    if PUBLIC_UPLOAD_DIR not in parts:
+        return ""
+
+    upload_index = parts.index(PUBLIC_UPLOAD_DIR)
+    return "/".join(parts[upload_index + 1:])
+
+
 def to_public_path(path: str) -> str:
     """Return the browser-facing path served by the /uploads mount."""
     if not path:
         return path
 
     normalized = str(path).replace("\\", "/")
-    upload_marker = f"/{PUBLIC_UPLOAD_DIR}/"
+    upload_relative_path = get_upload_relative_path(normalized)
 
-    if normalized.startswith(f"{PUBLIC_UPLOAD_DIR}/"):
-        return normalized
-    if upload_marker in normalized:
-        return f"{PUBLIC_UPLOAD_DIR}/{normalized.split(upload_marker, 1)[1]}"
+    if upload_relative_path:
+        return f"{PUBLIC_UPLOAD_DIR}/{upload_relative_path}"
 
     return normalized.lstrip("/")
 
@@ -54,13 +66,13 @@ def resolve_upload_path(path: str) -> str:
     if os.path.isabs(path):
         return path
 
-    if normalized.startswith(f"{PUBLIC_UPLOAD_DIR}/"):
-        relative = normalized[len(PUBLIC_UPLOAD_DIR) + 1:]
+    upload_relative_path = get_upload_relative_path(normalized)
+    if upload_relative_path:
         for upload_dir in [UPLOAD_DIR, CWD_UPLOAD_DIR, SCRIPT_UPLOAD_DIR]:
-            candidate = os.path.join(upload_dir, *relative.split("/"))
+            candidate = os.path.join(upload_dir, *upload_relative_path.split("/"))
             if os.path.exists(candidate):
                 return candidate
-        return os.path.join(UPLOAD_DIR, *relative.split("/"))
+        return os.path.join(UPLOAD_DIR, *upload_relative_path.split("/"))
 
     return path
 

@@ -90,7 +90,9 @@ try:
     from fastapi.responses import FileResponse
 
     @app.get("/uploads/{file_path:path}", include_in_schema=False)
+    @app.get("/data/uploads/{file_path:path}", include_in_schema=False)
     @app.get("/app/uploads/{file_path:path}", include_in_schema=False)
+    @app.get("/app/data/uploads/{file_path:path}", include_in_schema=False)
     @app.get("/backend/uploads/{file_path:path}", include_in_schema=False)
     async def serve_upload(file_path: str):
         for upload_root in upload_roots:

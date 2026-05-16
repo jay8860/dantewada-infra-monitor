@@ -20,6 +20,18 @@ const getDefaultMediaOrigin = () => {
     return isLocalVite ? 'http://localhost:8000' : '';
 };
 
+const normalizeMediaPath = (path) => {
+    const normalized = String(path).replace(/\\/g, '/').replace(/^\/+/, '');
+    const parts = normalized.split('/').filter(Boolean);
+    const uploadIndex = parts.indexOf('uploads');
+
+    if (uploadIndex >= 0 && uploadIndex < parts.length - 1) {
+        return parts.slice(uploadIndex).join('/');
+    }
+
+    return normalized;
+};
+
 export const buildMediaUrl = (path) => {
     if (!path) {
         return '';
@@ -30,7 +42,7 @@ export const buildMediaUrl = (path) => {
         return value;
     }
 
-    const normalizedPath = value.replace(/^\/+/, '');
+    const normalizedPath = normalizeMediaPath(value);
     const origin = getDefaultMediaOrigin();
     return origin ? `${origin}/${normalizedPath}` : `/${normalizedPath}`;
 };
