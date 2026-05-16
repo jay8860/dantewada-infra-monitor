@@ -30,6 +30,41 @@ def serialize_work_photo(photo):
     }
 
 
+def get_inspection_summary_map(db: Session, work_ids: List[int]):
+    if not work_ids:
+        return {}, {}
+
+    inspection_counts = dict(
+        db.query(models.Inspection.work_id, func.count(models.Inspection.id))
+        .filter(models.Inspection.work_id.in_(work_ids))
+        .group_by(models.Inspection.work_id)
+        .all()
+    )
+
+    subq_insp = db.query(
+        models.Inspection.work_id,
+        func.max(models.Inspection.id).label('latest_id')
+    ).filter(models.Inspection.work_id.in_(work_ids)).group_by(models.Inspection.work_id).subquery()
+
+    inspections = db.query(models.Inspection).join(
+        subq_insp, models.Inspection.id == subq_insp.c.latest_id
+    ).all()
+
+    latest_inspections = {}
+    for inspection in inspections:
+        latest_inspections[inspection.work_id] = {
+            "remark": inspection.remarks,
+            "date": inspection.inspection_date.isoformat() if inspection.inspection_date else None,
+            "status": inspection.status_at_time,
+            "inspector": inspection.inspector_name,
+            "designation": inspection.inspector_designation,
+            "latitude": inspection.latitude,
+            "longitude": inspection.longitude
+        }
+
+    return latest_inspections, inspection_counts
+
+
 # --- Auth ---
 @router.post("/token")
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -543,6 +578,8 @@ async def get_my_assignments(
     ).order_by(models.Work.id)
 
     works = query.all()
+    work_ids = [w.id for w in works]
+    latest_inspections, inspection_counts = get_inspection_summary_map(db, work_ids)
 
     result = []
     for w in works:
@@ -551,6 +588,12 @@ async def get_my_assignments(
         work_dict = {c.name: getattr(w, c.name) for c in w.__table__.columns}
         work_dict["photos"] = [serialize_work_photo(p) for p in photos]
         work_dict["assigned_officer"] = {"id": assigned_officer.id, "username": assigned_officer.username} if assigned_officer else None
+        work_dict["inspection_count"] = inspection_counts.get(w.id, 0)
+        work_dict["user_remark"] = latest_inspections.get(w.id, {}).get("remark")
+        work_dict["photo_upload_date"] = latest_inspections.get(w.id, {}).get("date")
+        work_dict["reported_status"] = latest_inspections.get(w.id, {}).get("status")
+        work_dict["latest_inspector"] = latest_inspections.get(w.id, {}).get("inspector")
+        work_dict["latest_inspector_designation"] = latest_inspections.get(w.id, {}).get("designation")
         result.append(work_dict)
 
     return result
@@ -612,30 +655,16 @@ async def get_works(
     work_ids = [w.id for w in works]
     work_photos_map = {}
     latest_inspections = {}
+    inspection_counts = {}
     
     if work_ids:
-        from sqlalchemy import func
         photos = db.query(models.WorkPhoto).filter(models.WorkPhoto.work_id.in_(work_ids)).order_by(models.WorkPhoto.uploaded_at.desc()).all()
         for p in photos:
             if p.work_id not in work_photos_map:
                 work_photos_map[p.work_id] = []
             work_photos_map[p.work_id].append(serialize_work_photo(p))
-            
-        subq_insp = db.query(
-            models.Inspection.work_id,
-            func.max(models.Inspection.id).label('latest_id')
-        ).filter(models.Inspection.work_id.in_(work_ids)).group_by(models.Inspection.work_id).subquery()
-        
-        inspections = db.query(models.Inspection).join(
-            subq_insp, models.Inspection.id == subq_insp.c.latest_id
-        ).all()
-        
-        for i in inspections:
-            latest_inspections[i.work_id] = {
-                "remark": i.remarks,
-                "date": i.inspection_date.isoformat() if i.inspection_date else None,
-                "status": i.status_at_time
-            }
+
+        latest_inspections, inspection_counts = get_inspection_summary_map(db, work_ids)
             
     # Build response with thumbnail info
     result = []
@@ -672,6 +701,9 @@ async def get_works(
             "user_remark": latest_inspections.get(w.id, {}).get("remark"),
             "photo_upload_date": latest_inspections.get(w.id, {}).get("date"),
             "reported_status": latest_inspections.get(w.id, {}).get("status"),
+            "inspection_count": inspection_counts.get(w.id, 0),
+            "latest_inspector": latest_inspections.get(w.id, {}).get("inspector"),
+            "latest_inspector_designation": latest_inspections.get(w.id, {}).get("designation"),
         }
         result.append(work_dict)
     

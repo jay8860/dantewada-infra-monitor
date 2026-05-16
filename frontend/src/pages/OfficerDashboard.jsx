@@ -161,6 +161,26 @@ const OfficerDashboard = () => {
 
     const { currentItems, totalPages, totalCount } = getPaginatedData();
 
+    const getStatusBadgeClass = (value) => {
+        const normalized = (value || '').toLowerCase();
+        if (normalized.includes('complete')) return 'bg-green-100 text-green-700';
+        if (normalized.includes('progress') || normalized.includes('running')) return 'bg-yellow-100 text-yellow-700';
+        if (normalized.includes('not started')) return 'bg-gray-100 text-gray-600';
+        if (normalized.includes('stall')) return 'bg-red-100 text-red-700';
+        return 'bg-blue-50 text-blue-700';
+    };
+
+    const formatProgress = (value) => {
+        if (value === null || value === undefined || value === '') return null;
+        const text = String(value).trim();
+        return text.endsWith('%') ? text : `${text}%`;
+    };
+
+    const getLatestPhoto = (work) => {
+        if (!work.photos || work.photos.length === 0) return null;
+        return work.photos[0];
+    };
+
     const openHistoryPhoto = (eventIndex, photoIndex) => {
         const allPhotos = [];
         let targetIndex = 0;
@@ -705,7 +725,8 @@ const OfficerDashboard = () => {
                                             <th className="px-4 py-3">Work Name</th>
                                             <th className="px-4 py-3">AS Amount</th>
                                             <th className="px-4 py-3 hidden md:table-cell">AS Date</th>
-                                            <th className="px-4 py-3">Status</th>
+                                            <th className="px-4 py-3">Work Status</th>
+                                            <th className="px-4 py-3">Past Inspections</th>
                                             {activeTab === 'assignments' && <th className="px-4 py-3">Deadline</th>}
                                             <th className="px-4 py-3 text-right">Action</th>
                                         </tr>
@@ -726,13 +747,66 @@ const OfficerDashboard = () => {
                                                     <td className="px-4 py-3 hidden md:table-cell text-gray-500">
                                                         {work.sanctioned_date ? new Date(work.sanctioned_date).toLocaleDateString('en-IN', {day: '2-digit', month: 'short', year: 'numeric'}) : '-'}
                                                     </td>
-                                                    <td className="px-4 py-3">
-                                                        <span className={`inline-flex px-2 py-1 rounded text-xs font-bold uppercase ${work.current_status === 'Completed' ? 'bg-green-100 text-green-700' :
-                                                            work.current_status === 'In Progress' ? 'bg-yellow-100 text-yellow-700' :
-                                                                'bg-gray-100 text-gray-600'
-                                                            }`}>
-                                                            {work.current_status}
-                                                        </span>
+                                                    <td className="px-4 py-3 min-w-[150px]">
+                                                        <div className="flex flex-col gap-1.5 items-start">
+                                                            <span className={`inline-flex px-2 py-1 rounded text-xs font-bold uppercase ${getStatusBadgeClass(work.current_status)}`}>
+                                                                {work.current_status || 'Not Updated'}
+                                                            </span>
+                                                            {formatProgress(work.work_percentage) && (
+                                                                <span className="text-[11px] text-gray-500">
+                                                                    Progress: <span className="font-bold text-gray-700">{formatProgress(work.work_percentage)}</span>
+                                                                </span>
+                                                            )}
+                                                            {work.remark && (
+                                                                <span className="text-[11px] text-gray-400 line-clamp-2 max-w-[180px]" title={work.remark}>
+                                                                    {work.remark}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 min-w-[260px]">
+                                                        {work.inspection_count > 0 ? (
+                                                            <div className="flex items-start gap-3">
+                                                                {getLatestPhoto(work) ? (
+                                                                    <img
+                                                                        src={buildMediaUrl(getLatestPhoto(work).thumbnail_path || getLatestPhoto(work).image_path)}
+                                                                        alt="Latest inspection"
+                                                                        className="w-12 h-12 rounded-lg object-cover border border-gray-200 shrink-0"
+                                                                        loading="lazy"
+                                                                    />
+                                                                ) : (
+                                                                    <div className="w-12 h-12 rounded-lg border border-dashed border-gray-200 bg-gray-50 flex items-center justify-center text-gray-300 shrink-0">
+                                                                        <Camera size={18} />
+                                                                    </div>
+                                                                )}
+                                                                <div className="min-w-0">
+                                                                    <div className="flex flex-wrap items-center gap-2">
+                                                                        <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">
+                                                                            {work.inspection_count} inspection{work.inspection_count === 1 ? '' : 's'}
+                                                                        </span>
+                                                                        {work.reported_status && (
+                                                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${getStatusBadgeClass(work.reported_status)}`}>
+                                                                                {work.reported_status}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                    <p className="text-[11px] text-gray-500 mt-1">
+                                                                        {work.photo_upload_date ? new Date(work.photo_upload_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Date unavailable'}
+                                                                        {work.latest_inspector ? ` by ${work.latest_inspector}` : ''}
+                                                                    </p>
+                                                                    {work.user_remark && (
+                                                                        <p className="text-xs text-gray-600 mt-1 line-clamp-2 max-w-[220px]" title={work.user_remark}>
+                                                                            {work.user_remark}
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex items-center gap-2 text-xs text-gray-400">
+                                                                <Camera size={14} />
+                                                                No past inspection
+                                                            </div>
+                                                        )}
                                                     </td>
                                                     {activeTab === 'assignments' && (
                                                         <td className="px-4 py-3">
@@ -758,7 +832,7 @@ const OfficerDashboard = () => {
                                             ))
                                         ) : (
                                             <tr>
-                                                <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                                                <td colSpan={activeTab === 'assignments' ? 8 : 7} className="px-4 py-8 text-center text-gray-500">
                                                     No works found.
                                                 </td>
                                             </tr>
