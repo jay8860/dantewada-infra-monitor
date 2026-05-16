@@ -4,7 +4,11 @@ __pycache__/
 .DS_Store
 dist/
 *.pyc
-dantewada_works.db
+*.db
 /backend/data/
 /backend/uploads/
 .env
+
+# Data files
+*.xlsx
+*.csv

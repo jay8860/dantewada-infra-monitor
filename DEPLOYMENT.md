@@ -75,7 +75,7 @@ Your-Repo/
 ## Step 4: Final Checks
 
 1.  Open your **Frontend URL**.
-2.  Try logging in (`admin` / `admin123`).
+2.  Try logging in with your configured admin credentials.
     *   *Note: If login fails, you may need to re-upload data or reset the password via the backend console because the DB is fresh.*
 3.  Check the Map.
 
