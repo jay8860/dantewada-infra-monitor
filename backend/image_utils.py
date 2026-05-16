@@ -14,6 +14,8 @@ UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
 FULL_DIR = os.path.join(UPLOAD_DIR, "photos")
 THUMB_DIR = os.path.join(UPLOAD_DIR, "thumbnails")
 PUBLIC_UPLOAD_DIR = "uploads"
+SCRIPT_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+CWD_UPLOAD_DIR = os.path.join(os.getcwd(), "uploads")
 
 # Compression settings
 MAX_WIDTH = 1920       # Max pixel width for full-size
@@ -54,6 +56,10 @@ def resolve_upload_path(path: str) -> str:
 
     if normalized.startswith(f"{PUBLIC_UPLOAD_DIR}/"):
         relative = normalized[len(PUBLIC_UPLOAD_DIR) + 1:]
+        for upload_dir in [UPLOAD_DIR, CWD_UPLOAD_DIR, SCRIPT_UPLOAD_DIR]:
+            candidate = os.path.join(upload_dir, *relative.split("/"))
+            if os.path.exists(candidate):
+                return candidate
         return os.path.join(UPLOAD_DIR, *relative.split("/"))
 
     return path

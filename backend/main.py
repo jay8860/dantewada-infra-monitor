@@ -1,5 +1,5 @@
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
@@ -7,6 +7,7 @@ import logging
 import sys
 import traceback
 from datetime import datetime
+from pathlib import Path
 
 # Setup Logging first
 logging.basicConfig(level=logging.INFO)
@@ -73,12 +74,33 @@ try:
     import init_admin
     from routes import router
 
-    # Mount Uploads
+    # Serve Uploads
     DATA_DIR = os.environ.get("DATA_DIR", ".")
     UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
     if not os.path.exists(UPLOAD_DIR):
         os.makedirs(UPLOAD_DIR)
-    app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
+    script_upload_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+    cwd_upload_dir = os.path.join(os.getcwd(), "uploads")
+    upload_roots = []
+    for upload_dir in [UPLOAD_DIR, cwd_upload_dir, script_upload_dir]:
+        if upload_dir not in upload_roots:
+            upload_roots.append(upload_dir)
+
+    from fastapi.responses import FileResponse
+
+    @app.get("/uploads/{file_path:path}", include_in_schema=False)
+    @app.get("/app/uploads/{file_path:path}", include_in_schema=False)
+    @app.get("/backend/uploads/{file_path:path}", include_in_schema=False)
+    async def serve_upload(file_path: str):
+        for upload_root in upload_roots:
+            root_path = Path(upload_root).resolve()
+            candidate = (root_path / file_path).resolve()
+            if root_path != candidate and root_path not in candidate.parents:
+                continue
+            if candidate.is_file():
+                return FileResponse(candidate)
+        raise HTTPException(status_code=404, detail="Upload not found")
 
     # Include Router (Priority over SPA catch-all)
     app.include_router(router, prefix="/api")
@@ -90,8 +112,6 @@ try:
         assets_path = os.path.join(STATIC_DIR, "assets")
         if os.path.exists(assets_path):
             app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
-
-        from fastapi.responses import FileResponse
 
         # 2. Specific route for root index
         @app.get("/", include_in_schema=False)
