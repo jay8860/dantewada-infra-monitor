@@ -535,6 +535,27 @@ def build_works_query(
 def apply_sorting(query, sort_by, sort_order):
     if not sort_by:
         return query
+
+    is_desc = sort_order == 'desc'
+
+    if sort_by == 'photos':
+        photo_summary = (
+            query.session.query(
+                models.WorkPhoto.work_id.label('work_id'),
+                func.count(models.WorkPhoto.id).label('photo_count'),
+                func.max(models.WorkPhoto.uploaded_at).label('latest_photo_at')
+            )
+            .group_by(models.WorkPhoto.work_id)
+            .subquery()
+        )
+        photo_count = func.coalesce(photo_summary.c.photo_count, 0)
+        latest_photo = photo_summary.c.latest_photo_at
+        direction = photo_count.desc() if is_desc else photo_count.asc()
+        latest_direction = latest_photo.desc() if is_desc else latest_photo.asc()
+        return (
+            query.outerjoin(photo_summary, photo_summary.c.work_id == models.Work.id)
+            .order_by(direction, latest_direction, models.Work.id.asc())
+        )
         
     valid_columns = {
         'work_name': models.Work.work_name,
@@ -552,7 +573,7 @@ def apply_sorting(query, sort_by, sort_order):
     
     col = valid_columns.get(sort_by)
     if col:
-        if sort_order == 'desc':
+        if is_desc:
             query = query.order_by(col.desc())
         else:
             query = query.order_by(col.asc())

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../api';
 import { saveOfflineUpdate, getPendingUpdates, deletePendingUpdate } from '../offlineManager';
 import { useAuth } from '../contexts/AuthContext';
-import { MapPin, RefreshCw, LogOut, Search, Clock, AlertTriangle, CheckCircle, Calendar, ChevronLeft, ChevronRight, Camera, Info } from 'lucide-react';
+import { MapPin, RefreshCw, LogOut, Search, Clock, AlertTriangle, CheckCircle, Calendar, ChevronLeft, ChevronRight, Camera, Image as ImageIcon, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import WorkDetailDrawer from '../components/WorkDetailDrawer';
 import PhotoLightbox from '../components/PhotoLightbox';
@@ -206,6 +206,19 @@ const OfficerDashboard = () => {
     };
 
     // --- Form Logic ---
+    const isCoordinateFilled = (value) => value !== undefined && value !== null && String(value).trim() !== '';
+    const hasValidLocation = isCoordinateFilled(location?.latitude)
+        && isCoordinateFilled(location?.longitude)
+        && Number.isFinite(Number(location.latitude))
+        && Number.isFinite(Number(location.longitude))
+        && Math.abs(Number(location.latitude)) <= 90
+        && Math.abs(Number(location.longitude)) <= 180;
+
+    const setManualLocationValue = (field, value) => {
+        setUsingManualLoc(true);
+        setLocation(prev => ({ ...(prev || {}), [field]: value }));
+    };
+
     const getLocation = () => {
         if (!navigator.geolocation) {
             alert('Geolocation is not supported');
@@ -228,8 +241,8 @@ const OfficerDashboard = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!selectedWork || !photo || (!location && !usingManualLoc)) {
-            alert("Please fill all fields and capture location");
+        if (!selectedWork || !photo || !hasValidLocation) {
+            alert("Please select a photo and capture GPS or enter valid latitude and longitude manually.");
             return;
         }
         if (!declarationChecked) {
@@ -263,6 +276,8 @@ const OfficerDashboard = () => {
             setInspectorName('');
             setInspectorDesignation('');
             setDeclarationChecked(false);
+            setLocation(null);
+            setUsingManualLoc(false);
             setSelectedWork(null);
             fetchWorks();
         } catch (error) {
@@ -284,6 +299,8 @@ const OfficerDashboard = () => {
                 setInspectorName('');
                 setInspectorDesignation('');
                 setDeclarationChecked(false);
+                setLocation(null);
+                setUsingManualLoc(false);
                 setSelectedWork(null);
             }
         } finally {
@@ -536,17 +553,36 @@ const OfficerDashboard = () => {
                                 <button type="button" onClick={getLocation} className="flex-1 bg-blue-50 text-blue-700 py-3 rounded-lg font-medium flex justify-center items-center gap-2 border border-blue-100 hover:bg-blue-100 transition">
                                     <MapPin size={18} /> Update GPS
                                 </button>
+                                <button type="button" onClick={() => setUsingManualLoc(true)} className="flex-1 bg-white text-gray-700 py-3 rounded-lg font-medium border border-gray-200 hover:bg-gray-50 transition">
+                                    Enter Manually
+                                </button>
                             </div>
                             {location && (
-                                <p className="text-xs text-center mt-2 text-green-600 font-mono">
+                                <p className={`text-xs text-center mt-2 font-mono ${hasValidLocation ? 'text-green-600' : 'text-amber-600'}`}>
                                     Lat: {location.latitude ? parseFloat(location.latitude).toFixed(5) : '0.00000'}, 
                                     Lng: {location.longitude ? parseFloat(location.longitude).toFixed(5) : '0.00000'}
                                 </p>
                             )}
                             {usingManualLoc && (
                                 <div className="mt-2 grid grid-cols-2 gap-2">
-                                    <input placeholder="Lat" type="number" step="any" className="border p-2 rounded" onChange={e => setLocation(p => ({ ...p, latitude: e.target.value }))} />
-                                    <input placeholder="Lng" type="number" step="any" className="border p-2 rounded" onChange={e => setLocation(p => ({ ...p, longitude: e.target.value }))} />
+                                    <input
+                                        placeholder="Lat"
+                                        type="number"
+                                        inputMode="decimal"
+                                        step="any"
+                                        value={location?.latitude ?? ''}
+                                        className="border p-2 rounded"
+                                        onChange={e => setManualLocationValue('latitude', e.target.value)}
+                                    />
+                                    <input
+                                        placeholder="Lng"
+                                        type="number"
+                                        inputMode="decimal"
+                                        step="any"
+                                        value={location?.longitude ?? ''}
+                                        className="border p-2 rounded"
+                                        onChange={e => setManualLocationValue('longitude', e.target.value)}
+                                    />
                                 </div>
                             )}
                         </div>
@@ -564,20 +600,29 @@ const OfficerDashboard = () => {
 
                         <div>
                             <label className="block text-xs font-bold uppercase text-gray-500 mb-2">Evidence Photo</label>
-                            <div className="relative border-2 border-dashed border-gray-300 rounded-xl h-40 flex flex-col items-center justify-center bg-gray-50 hover:bg-gray-100 transition">
-                                <input type="file" accept="image/*" capture="environment" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={e => setPhoto(e.target.files[0])} />
+                            <div className="border-2 border-dashed border-gray-300 rounded-xl p-4 bg-gray-50">
                                 {photo ? (
-                                    <div className="text-center">
+                                    <div className="text-center mb-4">
                                         <CheckCircle className="text-green-500 mx-auto mb-2" size={32} />
                                         <span className="text-sm text-green-700 font-medium">Photo Selected</span>
                                         <p className="text-xs text-gray-400 mt-1">{photo.name}</p>
                                     </div>
                                 ) : (
-                                    <div className="text-center">
+                                    <div className="text-center mb-4">
                                         <Camera size={32} className="text-gray-400 mx-auto mb-2" />
-                                        <span className="text-sm text-gray-500 font-medium">Tap to Capture</span>
+                                        <span className="text-sm text-gray-500 font-medium">Select inspection photo</span>
                                     </div>
                                 )}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <label className="cursor-pointer rounded-lg bg-blue-600 text-white py-3 font-semibold flex items-center justify-center gap-2 shadow-sm">
+                                        <Camera size={18} /> Camera
+                                        <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={e => setPhoto(e.target.files?.[0] || null)} />
+                                    </label>
+                                    <label className="cursor-pointer rounded-lg bg-white text-gray-700 py-3 font-semibold flex items-center justify-center gap-2 border border-gray-200 shadow-sm">
+                                        <ImageIcon size={18} /> Gallery
+                                        <input type="file" accept="image/*" className="sr-only" onChange={e => setPhoto(e.target.files?.[0] || null)} />
+                                    </label>
+                                </div>
                             </div>
                         </div>
 
@@ -604,7 +649,7 @@ const OfficerDashboard = () => {
                             </div>
 
                             <button 
-                                disabled={submitting || !photo || (!location && !usingManualLoc) || !declarationChecked} 
+                                disabled={submitting || !photo || !hasValidLocation || !declarationChecked}
                                 type="submit" 
                                 className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-bold shadow-lg shadow-blue-200 transition disabled:opacity-70 disabled:cursor-not-allowed relative overflow-hidden flex justify-center items-center"
                             >
