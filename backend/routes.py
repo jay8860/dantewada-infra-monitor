@@ -1009,6 +1009,160 @@ async def export_inspection_status(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Report Export Failed: {str(e)}")
 
 
+def build_agency_photo_remark(total_works: int, works_with_photos: int, average_photos: float) -> str:
+    works_without_photos = total_works - works_with_photos
+    coverage = (works_with_photos / total_works * 100) if total_works else 0
+
+    if total_works == 0:
+        return "No works found for this agency in the selected report scope."
+    if works_without_photos == total_works:
+        return f"No uploaded photos found for all {total_works} works. Photo inspections need to be started immediately."
+    if coverage < 50:
+        return f"{works_without_photos} works do not have any photos and overall photo coverage is below 50%. Urgent follow-up required."
+    if works_without_photos > 0:
+        return f"{works_without_photos} works do not have any uploaded photos. Pending photo inspections should be completed on priority."
+    if average_photos < 2:
+        return "All works have at least one photo, but average photo upload is low. Add stage-wise photos as work progresses."
+    return "Good photo upload coverage. Continue regular stage-wise photo updates."
+
+
+@router.get("/reports/agency-photo-inspections/pdf")
+async def export_agency_photo_inspection_report_pdf(
+    department: Optional[List[str]] = Query(None),
+    block: Optional[List[str]] = Query(None),
+    panchayat: Optional[List[str]] = Query(None),
+    status: Optional[List[str]] = Query(None),
+    agency: Optional[List[str]] = Query(None),
+    year: Optional[List[str]] = Query(None),
+    search: Optional[str] = None,
+    min_amount: Optional[str] = Query(None),
+    max_amount: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only admin can export agency photo reports")
+
+    try:
+        parsed_min = None
+        if min_amount and str(min_amount).strip():
+            try: parsed_min = float(min_amount)
+            except: pass
+
+        parsed_max = None
+        if max_amount and str(max_amount).strip():
+            try: parsed_max = float(max_amount)
+            except: pass
+
+        parsed_start = None
+        if start_date and str(start_date).strip():
+            try: parsed_start = datetime.fromisoformat(str(start_date).replace('Z', '+00:00'))
+            except: pass
+
+        parsed_end = None
+        if end_date and str(end_date).strip():
+            try: parsed_end = datetime.fromisoformat(str(end_date).replace('Z', '+00:00'))
+            except: pass
+
+        query = build_works_query(db, current_user, department, block, panchayat, status, agency, year, search, parsed_start, parsed_end, parsed_min, parsed_max)
+        works = query.all()
+        work_ids = [w.id for w in works]
+
+        photo_counts = {}
+        latest_photo_dates = {}
+        if work_ids:
+            photo_rows = (
+                db.query(
+                    models.WorkPhoto.work_id,
+                    func.count(models.WorkPhoto.id),
+                    func.max(models.WorkPhoto.uploaded_at)
+                )
+                .filter(models.WorkPhoto.work_id.in_(work_ids))
+                .group_by(models.WorkPhoto.work_id)
+                .all()
+            )
+            photo_counts = {work_id: count for work_id, count, _latest in photo_rows}
+            latest_photo_dates = {work_id: latest for work_id, _count, latest in photo_rows}
+
+        agency_map = {}
+        for work in works:
+            agency_name = (work.agency_name or "Unknown Agency").strip() or "Unknown Agency"
+            if agency_name not in agency_map:
+                agency_map[agency_name] = {
+                    "agency": agency_name,
+                    "total_works": 0,
+                    "works_with_photos": 0,
+                    "works_without_photos": 0,
+                    "total_photos": 0,
+                    "latest_photo": None,
+                }
+
+            photo_count = photo_counts.get(work.id, 0)
+            latest_photo = latest_photo_dates.get(work.id)
+            row = agency_map[agency_name]
+            row["total_works"] += 1
+            row["total_photos"] += photo_count
+            if photo_count > 0:
+                row["works_with_photos"] += 1
+            else:
+                row["works_without_photos"] += 1
+            if latest_photo and (not row["latest_photo"] or latest_photo > row["latest_photo"]):
+                row["latest_photo"] = latest_photo
+
+        report_rows = []
+        total_works = len(works)
+        works_with_photos = 0
+        total_photos = 0
+
+        for row in agency_map.values():
+            average_photos = row["total_photos"] / row["total_works"] if row["total_works"] else 0
+            coverage_percent = (row["works_with_photos"] / row["total_works"] * 100) if row["total_works"] else 0
+            works_with_photos += row["works_with_photos"]
+            total_photos += row["total_photos"]
+
+            report_rows.append({
+                "agency": row["agency"],
+                "total_works": row["total_works"],
+                "works_with_photos": row["works_with_photos"],
+                "works_without_photos": row["works_without_photos"],
+                "total_photos": row["total_photos"],
+                "average_photos_per_work": average_photos,
+                "coverage_percent": coverage_percent,
+                "latest_photo_date": row["latest_photo"].strftime("%d %b %Y") if row["latest_photo"] else None,
+                "remark": build_agency_photo_remark(row["total_works"], row["works_with_photos"], average_photos),
+            })
+
+        report_rows.sort(key=lambda r: (-r["works_without_photos"], r["coverage_percent"], r["agency"].lower()))
+
+        works_without_photos = total_works - works_with_photos
+        overall_coverage = (works_with_photos / total_works * 100) if total_works else 0
+        average_photos = total_photos / total_works if total_works else 0
+        generated_at = (datetime.utcnow() + timedelta(hours=5, minutes=30)).strftime("%d %b %Y, %I:%M %p IST")
+        summary = {
+            "generated_at": generated_at,
+            "agency_count": len(report_rows),
+            "total_works": total_works,
+            "works_with_photos": works_with_photos,
+            "works_without_photos": works_without_photos,
+            "total_photos": total_photos,
+            "coverage_text": f"{overall_coverage:.1f}%",
+            "average_photos_text": f"{average_photos:.2f}",
+        }
+
+        pdf_buffer = pdf_generator.build_agency_photo_report_pdf(report_rows, summary)
+        return Response(
+            content=pdf_buffer.getvalue(),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=agency_photo_inspection_report_{datetime.now().strftime('%Y%m%d')}.pdf"}
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Agency Photo Report Export Failed: {str(e)}")
+
+
 @router.get("/works/{work_id}")
 async def get_work(work_id: int, db: Session = Depends(get_db)):
     # Work does not have 'photos' relationship directly. Inspections have photos.

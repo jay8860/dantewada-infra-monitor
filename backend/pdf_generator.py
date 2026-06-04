@@ -94,3 +94,119 @@ def build_visual_pdf(works_data):
     doc.build(elements)
     buffer.seek(0)
     return buffer
+
+
+def build_agency_photo_report_pdf(report_rows, summary):
+    """Generate an agency-wise PDF report for inspection photo coverage."""
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=24, leftMargin=24, topMargin=28, bottomMargin=24)
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle('AgencyPhotoTitle', parent=styles['Heading1'], fontSize=16, textColor=colors.HexColor('#1E3A8A'), spaceAfter=8)
+    subtitle_style = ParagraphStyle('AgencyPhotoSubtitle', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor('#475569'), spaceAfter=12)
+    metric_style = ParagraphStyle('MetricStyle', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor('#111827'), alignment=1)
+    header_style = ParagraphStyle('TableHeader', parent=styles['Normal'], fontSize=8, textColor=colors.white, fontName='Helvetica-Bold', alignment=1)
+    cell_style = ParagraphStyle('TableCell', parent=styles['Normal'], fontSize=7.5, leading=9, textColor=colors.HexColor('#111827'))
+    center_cell_style = ParagraphStyle('CenterCell', parent=cell_style, alignment=1)
+    remark_style = ParagraphStyle('RemarkCell', parent=cell_style, fontSize=7, leading=8.5)
+
+    elements = [
+        Paragraph("Dantewada Infrastructure - Agency Photo Inspection Report", title_style),
+        Paragraph(
+            f"Generated on {summary.get('generated_at', 'N/A')} | "
+            f"Agencies: {summary.get('agency_count', 0)} | "
+            f"Works needing photo inspection: {summary.get('total_works', 0)} | "
+            f"Works with photos: {summary.get('works_with_photos', 0)} | "
+            f"Works without photos: {summary.get('works_without_photos', 0)}",
+            subtitle_style
+        )
+    ]
+
+    overview_data = [[
+        Paragraph("<b>Overall Coverage</b><br/>" + summary.get('coverage_text', '0%'), metric_style),
+        Paragraph("<b>Total Photos</b><br/>" + str(summary.get('total_photos', 0)), metric_style),
+        Paragraph("<b>Average Photos / Work</b><br/>" + summary.get('average_photos_text', '0.00'), metric_style),
+        Paragraph("<b>Pending Works</b><br/>" + str(summary.get('works_without_photos', 0)), metric_style),
+    ]]
+    overview = Table(overview_data, colWidths=[2.1 * inch, 2.1 * inch, 2.1 * inch, 2.1 * inch])
+    overview.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F8FAFC')),
+        ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E2E8F0')),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+    ]))
+    elements.append(overview)
+    elements.append(Spacer(1, 0.18 * inch))
+
+    headers = [
+        "Agency",
+        "Works Needing Photos",
+        "Works With Photos",
+        "Works Without Photos",
+        "Total Photos",
+        "Avg Photos / Work",
+        "Coverage",
+        "Latest Photo",
+        "Remark",
+    ]
+    table_data = [[Paragraph(h, header_style) for h in headers]]
+
+    for row in report_rows:
+        table_data.append([
+            Paragraph(str(row.get('agency', 'Unknown')), cell_style),
+            Paragraph(str(row.get('total_works', 0)), center_cell_style),
+            Paragraph(str(row.get('works_with_photos', 0)), center_cell_style),
+            Paragraph(str(row.get('works_without_photos', 0)), center_cell_style),
+            Paragraph(str(row.get('total_photos', 0)), center_cell_style),
+            Paragraph(f"{row.get('average_photos_per_work', 0):.2f}", center_cell_style),
+            Paragraph(f"{row.get('coverage_percent', 0):.1f}%", center_cell_style),
+            Paragraph(row.get('latest_photo_date') or "-", center_cell_style),
+            Paragraph(row.get('remark', ''), remark_style),
+        ])
+
+    if len(table_data) == 1:
+        table_data.append([
+            Paragraph("No works found for the selected filters.", cell_style),
+            "", "", "", "", "", "", "", ""
+        ])
+
+    table = Table(
+        table_data,
+        repeatRows=1,
+        colWidths=[1.6 * inch, 0.85 * inch, 0.75 * inch, 0.8 * inch, 0.65 * inch, 0.75 * inch, 0.65 * inch, 0.75 * inch, 2.45 * inch]
+    )
+    table_style = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1E3A8A')),
+        ('GRID', (0, 0), (-1, -1), 0.35, colors.HexColor('#CBD5E1')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+    ])
+
+    for idx, row in enumerate(report_rows, start=1):
+        background = colors.white if idx % 2 else colors.HexColor('#F8FAFC')
+        table_style.add('BACKGROUND', (0, idx), (-1, idx), background)
+        if row.get('works_without_photos', 0) > 0:
+            table_style.add('TEXTCOLOR', (3, idx), (3, idx), colors.HexColor('#B91C1C'))
+        if row.get('coverage_percent', 0) >= 85:
+            table_style.add('TEXTCOLOR', (6, idx), (6, idx), colors.HexColor('#15803D'))
+        elif row.get('coverage_percent', 0) < 50:
+            table_style.add('TEXTCOLOR', (6, idx), (6, idx), colors.HexColor('#B91C1C'))
+
+    table.setStyle(table_style)
+    elements.append(table)
+
+    elements.append(Spacer(1, 0.12 * inch))
+    elements.append(Paragraph(
+        "Note: Works needing photo inspection means all works in the selected report scope. "
+        "Works with photos are works where at least one inspection/site photo has been uploaded.",
+        subtitle_style
+    ))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer

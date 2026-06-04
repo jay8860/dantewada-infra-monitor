@@ -456,24 +456,32 @@ const AdminDashboard = () => {
         }
     };
 
+    const buildExportParams = (includeSort = true) => {
+        const params = new URLSearchParams();
+        Object.keys(filters).forEach(key => {
+            const val = filters[key];
+            if (Array.isArray(val)) {
+                val.forEach(v => params.append(key, v));
+            } else if (val) {
+                params.append(key, val);
+            }
+        });
+        if (dateRange.start) params.append('start_date', dateRange.start);
+        if (dateRange.end) params.append('end_date', dateRange.end);
+        if (debouncedAmountRange.min) params.append('min_amount', debouncedAmountRange.min);
+        if (debouncedAmountRange.max) params.append('max_amount', debouncedAmountRange.max);
+        if (debouncedSearch) params.append('search', debouncedSearch);
+        if (includeSort && sortConfig.key) {
+            params.append('sort_by', sortConfig.key);
+            params.append('sort_order', sortConfig.direction);
+        }
+        return params;
+    };
+
     const handleDownload = async () => {
         setDownloading(true);
         try {
-            // Build params same as fetchWorks
-            const params = new URLSearchParams();
-            Object.keys(filters).forEach(key => {
-                const val = filters[key];
-                if (Array.isArray(val)) {
-                    val.forEach(v => params.append(key, v));
-                } else if (val) {
-                    params.append(key, val);
-                }
-            });
-            if (debouncedSearch) params.append('search', debouncedSearch);
-            if (sortConfig.key) {
-                params.append('sort_by', sortConfig.key);
-                params.append('sort_order', sortConfig.direction);
-            }
+            const params = buildExportParams();
 
             const response = await api.get('/works/export', {
                 params,
@@ -499,20 +507,7 @@ const AdminDashboard = () => {
     const handlePDFDownload = async () => {
         setDownloading(true);
         try {
-            const params = new URLSearchParams();
-            Object.keys(filters).forEach(key => {
-                const val = filters[key];
-                if (Array.isArray(val)) {
-                    val.forEach(v => params.append(key, v));
-                } else if (val) {
-                    params.append(key, val);
-                }
-            });
-            if (debouncedSearch) params.append('search', debouncedSearch);
-            if (sortConfig.key) {
-                params.append('sort_by', sortConfig.key);
-                params.append('sort_order', sortConfig.direction);
-            }
+            const params = buildExportParams();
 
             const response = await api.get('/works/export/pdf', {
                 params,
@@ -529,6 +524,30 @@ const AdminDashboard = () => {
         } catch (error) {
             console.error("PDF Download failed", error);
             alert("Failed to download Visual PDF Report.");
+        } finally {
+            setDownloading(false);
+        }
+    };
+
+    const handleAgencyPhotoReportDownload = async () => {
+        setDownloading(true);
+        try {
+            const params = buildExportParams(false);
+            const response = await api.get('/reports/agency-photo-inspections/pdf', {
+                params,
+                responseType: 'blob'
+            });
+
+            const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `Agency_Photo_Inspection_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error) {
+            console.error("Agency photo report download failed", error);
+            alert("Failed to download agency photo inspection report.");
         } finally {
             setDownloading(false);
         }
@@ -941,6 +960,20 @@ const AdminDashboard = () => {
                                                 <div className="text-left">
                                                     <p className="font-bold text-red-700">Visual PDF Report</p>
                                                     <p className="text-[10px] text-red-500">Includes all site photos</p>
+                                                </div>
+                                            </button>
+
+                                            <button
+                                                onClick={() => { handleAgencyPhotoReportDownload(); setShowExportMenu(false); }}
+                                                disabled={downloading}
+                                                className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-emerald-50/50 rounded-lg transition group disabled:opacity-50"
+                                            >
+                                                <div className="bg-emerald-50 p-1.5 rounded-md group-hover:bg-emerald-100 transition">
+                                                    <ImageIcon size={14} className="text-emerald-600" />
+                                                </div>
+                                                <div className="text-left">
+                                                    <p className="font-bold text-emerald-700">Agency Photo Report</p>
+                                                    <p className="text-[10px] text-emerald-600">Photo coverage by agency</p>
                                                 </div>
                                             </button>
 
